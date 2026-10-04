@@ -1,0 +1,35 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+*.spec.bak
+
+.venv/
+venv/
+.env
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+*.log
+
+.vscode/
+.idea/
+
+# PyInstaller 빌드 산출물 (packaging/emailtomcp.spec은 추적)
+packaging/build/
+packaging/dist/
+
+# hatch-vcs가 빌드/설치 시점에 생성하는 단일 버전 소스 (DESIGN.md §15.2)
+src/emailtomcp/_version.py
+
+nul

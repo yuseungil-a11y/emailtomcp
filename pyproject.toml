@@ -1,0 +1,78 @@
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[project]
+name = "emailtomcp"
+dynamic = ["version"]
+description = "로컬 메일 클라이언트 + 내장 MCP 서버 (Claude 연동)"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Proprietary" }
+authors = [{ name = "UTInfo" }]
+dependencies = [
+    "PySide6>=6.7",
+    "platformdirs>=4.2",
+    "pydantic>=2.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-qt>=4.4",
+    "ruff>=0.6",
+    "mypy>=1.10",
+]
+
+[project.scripts]
+emailtomcp = "emailtomcp.__main__:main"
+
+[tool.hatch.version]
+source = "vcs"
+fallback-version = "1.0.0.dev0+unknown"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/emailtomcp/_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/emailtomcp"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+# hatch-vcs가 빌드/설치 시점에 생성하는 파일이다 — 손으로 고치지 않고 포맷/린트 대상에서도 뺀다.
+extend-exclude = ["src/emailtomcp/_version.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4"]
+ignore = []
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B018"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+disallow_untyped_defs = false
+exclude = ["tests/", "packaging/", "src/emailtomcp/_version.py"]
+
+[[tool.mypy.overrides]]
+module = "emailtomcp.ui.*"
+check_untyped_defs = false
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+markers = [
+    "unit: 외부 I/O 없는 순수 로직",
+    "integration: 로컬 I/O, docker 불필요(aiosmtpd, in-process MCPServer, fake_claude)",
+    "docker: GreenMail 등 docker 필요, 미가용 시 자동 skip",
+    "ui: pytest-qt, QT_QPA_PLATFORM=offscreen",
+    "e2e_claude: 실제 claude CLI + 로그인 필요, 옵트인",
+    "slow: 1초 이상",
+]
+addopts = '-m "not docker and not e2e_claude and not slow" --strict-markers'

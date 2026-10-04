@@ -1,0 +1,391 @@
+/*
+ * EmailToMCP 다크 테마
+ * 출처: docs/design/UI_디자인가이드.md (유티정보(주) 홈페이지 CSS 토큰 기반, .dark 세트)
+ * 적용: QApplication.setStyleSheet(이 파일 내용)
+ *
+ * 버튼 variant 동적 프로퍼티 사용법은 light.qss 상단 주석과 동일.
+ */
+
+* {
+    font-family: "Pretendard", "Malgun Gothic", "Segoe UI", sans-serif;
+    font-size: 13px;
+    color: #d4dae6;
+}
+
+QMainWindow, QDialog {
+    background-color: #1f2021;
+}
+
+/* ---------- 메뉴바 / 툴바 ---------- */
+QMenuBar {
+    background-color: #1e2124;
+    border-bottom: 1px solid #68696e;
+    padding: 2px 4px;
+}
+QMenuBar::item {
+    padding: 4px 10px;
+    border-radius: 4px;
+    background: transparent;
+}
+QMenuBar::item:selected {
+    background-color: #3c3d3e;
+}
+QMenu {
+    background-color: #1e2124;
+    border: 1px solid #68696e;
+    border-radius: 8px;
+    padding: 4px;
+}
+QMenu::item {
+    padding: 6px 12px;
+    border-radius: 4px;
+    color: #d4dae6;
+}
+QMenu::item:selected {
+    background-color: #3c3d3e;
+    color: #f1f3f7;
+}
+QMenu::separator {
+    height: 1px;
+    background: #3c3d3e;
+    margin: 4px 6px;
+}
+
+QToolBar {
+    background-color: #1e2124;
+    border-bottom: 1px solid #68696e;
+    spacing: 6px;
+    padding: 6px 8px;
+}
+QToolButton {
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 10px;
+    color: #d4dae6;
+}
+QToolButton:hover {
+    background-color: #3c3d3e;
+}
+QToolButton:pressed {
+    background-color: #454546;
+}
+QToolButton:checked {
+    background-color: #5678ff;
+    color: #ffffff;
+}
+
+/* ---------- 상태줄 ---------- */
+QStatusBar {
+    background-color: #2c2d2e;
+    border-top: 1px solid #68696e;
+    color: #adafb1;
+}
+QStatusBar QLabel {
+    color: #adafb1;
+    padding: 0 6px;
+}
+QStatusBar QLabel[statusDot="connected"] { color: #248ff4; font-weight: 600; }
+QStatusBar QLabel[statusDot="disconnected"] { color: #f15347; font-weight: 600; }
+
+/* ---------- 폴더 트리 ---------- */
+QTreeView {
+    background-color: #2c2d2e;
+    border: none;
+    outline: none;
+    padding: 4px;
+    show-decoration-selected: 1;
+}
+QTreeView::item {
+    padding: 5px 6px;
+    border-radius: 6px;
+    color: #d4dae6;
+}
+QTreeView::item:hover {
+    background-color: #3c3d3e;
+}
+QTreeView::item:selected {
+    background-color: #5678ff33;
+    color: #8a90fc;
+    font-weight: 600;
+}
+QTreeView::branch {
+    background: transparent;
+}
+
+QLabel[role="unreadBadge"] {
+    background-color: #5678ff;
+    color: #ffffff;
+    border-radius: 8px;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+/* ---------- 메일 그리드 ---------- */
+QTableView {
+    background-color: #1e2124;
+    alternate-background-color: #2c2d2e;
+    border: 1px solid #68696e;
+    border-radius: 8px;
+    gridline-color: #3c3d3e;
+    selection-background-color: #5678ff33;
+    selection-color: #f1f3f7;
+}
+QTableView::item {
+    padding: 6px 8px;
+    border-bottom: 1px solid #3c3d3e;
+}
+QTableView::item:hover {
+    background-color: #3c3d3e;
+}
+QTableView::item:selected {
+    background-color: #5678ff33;
+    color: #f1f3f7;
+}
+QHeaderView::section {
+    background-color: #2c2d2e;
+    color: #adafb1;
+    font-weight: 600;
+    font-size: 12px;
+    padding: 6px 8px;
+    border: none;
+    border-bottom: 1px solid #68696e;
+    border-right: 1px solid #3c3d3e;
+}
+QHeaderView::section:hover {
+    background-color: #3c3d3e;
+}
+
+QLabel[role="unreadDot"] {
+    color: #8a90fc;
+    font-size: 16px;
+}
+
+/* ---------- 미리보기 / 본문(QTextBrowser) ---------- */
+QTextBrowser, QTextEdit, QPlainTextEdit {
+    background-color: #1e2124;
+    border: 1px solid #68696e;
+    border-radius: 8px;
+    padding: 10px;
+    selection-background-color: #5678ff4d;
+    color: #d4dae6;
+}
+QLabel[role="previewFrom"] {
+    color: #f1f3f7;
+    font-weight: 600;
+    font-size: 14px;
+}
+QLabel[role="previewMeta"] {
+    color: #adafb1;
+    font-size: 12px;
+}
+QLabel[role="previewSubject"] {
+    color: #f1f3f7;
+    font-weight: 600;
+    font-size: 15px;
+}
+
+/* ---------- 입력창 ---------- */
+QLineEdit, QComboBox, QSpinBox, QDateEdit {
+    background-color: #1e2124;
+    border: 1px solid #68696e;
+    border-radius: 6px;
+    padding: 6px 10px;
+    color: #d4dae6;
+    selection-background-color: #5678ff4d;
+}
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDateEdit:focus {
+    border: 1px solid #5678ff;
+}
+QLineEdit[role="search"] {
+    border-radius: 14px;
+    padding: 6px 12px;
+    background-color: #2c2d2e;
+}
+
+/* ---------- 버튼 ---------- */
+QPushButton {
+    background-color: #2c2d2e;
+    border: 1px solid #68696e;
+    border-radius: 6px;
+    padding: 7px 16px;
+    color: #d4dae6;
+    font-weight: 500;
+}
+QPushButton:hover {
+    background-color: #3c3d3e;
+}
+QPushButton:pressed {
+    background-color: #454546;
+}
+QPushButton:disabled {
+    color: #717174;
+    background-color: #2c2d2e;
+    border-color: #3c3d3e;
+}
+
+QPushButton[variant="primary"] {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0.3,
+                                 stop:0 #5678ff, stop:1 #315aff);
+    border: none;
+    color: #ffffff;
+    font-weight: 600;
+}
+QPushButton[variant="primary"]:hover {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0.3,
+                                 stop:0 #6b89ff, stop:1 #4668ff);
+}
+QPushButton[variant="primary"]:pressed {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0.3,
+                                 stop:0 #4a69f0, stop:1 #2a4fe6);
+}
+QPushButton[variant="primary"]:disabled {
+    background: #454546;
+    color: #adafb1;
+}
+
+QPushButton[variant="secondary"] {
+    background: transparent;
+    border: 1px solid #68696e;
+    color: #d4dae6;
+}
+QPushButton[variant="secondary"]:hover {
+    background-color: #3c3d3e;
+}
+
+QPushButton[variant="destructive"] {
+    background-color: #f15347;
+    border: none;
+    color: #ffffff;
+    font-weight: 600;
+}
+QPushButton[variant="destructive"]:hover {
+    background-color: #d64e38;
+}
+QPushButton[variant="destructive"]:pressed {
+    background-color: #b83e30;
+}
+
+QPushButton[variant="link"] {
+    background: transparent;
+    border: none;
+    color: #8a90fc;
+    padding: 2px 4px;
+}
+QPushButton[variant="link"]:hover {
+    color: #a7acfc;
+    text-decoration: underline;
+}
+
+/* ---------- 체크박스 / 라디오 ---------- */
+QCheckBox, QRadioButton {
+    spacing: 8px;
+    color: #d4dae6;
+}
+QCheckBox::indicator, QRadioButton::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1px solid #68696e;
+    border-radius: 4px;
+    background: #1e2124;
+}
+QCheckBox::indicator:checked, QRadioButton::indicator:checked {
+    background-color: #5678ff;
+    border-color: #5678ff;
+}
+
+/* ---------- 탭 ---------- */
+QTabWidget::pane {
+    border: 1px solid #68696e;
+    border-radius: 8px;
+    top: -1px;
+}
+QTabBar::tab {
+    background: transparent;
+    color: #adafb1;
+    padding: 8px 16px;
+    border-bottom: 2px solid transparent;
+    margin-right: 4px;
+}
+QTabBar::tab:selected {
+    color: #8a90fc;
+    border-bottom: 2px solid #5678ff;
+    font-weight: 600;
+}
+QTabBar::tab:hover:!selected {
+    color: #d4dae6;
+}
+
+/* ---------- 스크롤바 ---------- */
+QScrollBar:vertical {
+    background: transparent;
+    width: 10px;
+    margin: 2px;
+}
+QScrollBar::handle:vertical {
+    background: #454546;
+    border-radius: 5px;
+    min-height: 24px;
+}
+QScrollBar::handle:vertical:hover {
+    background: #5b5b5d;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0;
+}
+QScrollBar:horizontal {
+    background: transparent;
+    height: 10px;
+    margin: 2px;
+}
+QScrollBar::handle:horizontal {
+    background: #454546;
+    border-radius: 5px;
+    min-width: 24px;
+}
+QScrollBar::handle:horizontal:hover {
+    background: #5b5b5d;
+}
+
+/* ---------- 스플리터 ---------- */
+QSplitter::handle {
+    background-color: #3c3d3e;
+}
+QSplitter::handle:hover {
+    background-color: #5678ff;
+}
+
+/* ---------- 프로그레스바 ---------- */
+QProgressBar {
+    background-color: #3c3d3e;
+    border: none;
+    border-radius: 4px;
+    height: 6px;
+    text-align: center;
+}
+QProgressBar::chunk {
+    background-color: #5678ff;
+    border-radius: 4px;
+}
+
+/* ---------- 도킹 패널 ---------- */
+QDockWidget {
+    titlebar-close-icon: none;
+    color: #d4dae6;
+}
+QDockWidget::title {
+    background-color: #2c2d2e;
+    padding: 6px 10px;
+    border-bottom: 1px solid #68696e;
+    font-weight: 600;
+}
+
+/* ---------- 툴팁 ---------- */
+QToolTip {
+    background-color: #454546;
+    color: #f1f3f7;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 8px;
+}
