@@ -75,6 +75,8 @@
 | 5 | N-01 IMAP 이동·삭제 Phase 모순 | 서버 폴더 목록 동기화, 이동(MOVE 또는 COPY+\Deleted+UID EXPUNGE), 휴지통·복구의 서버 반영은 **P1**이다. P4는 IDLE과 대량 폴더 성능만 맡는다. POP3는 로컬 폴더 전용이다 | §1.2 #2·#15, §2(b), §6.3, §12.2, §12.3 P1 ⑯ |
 | 6 | N-03 미결 사항 분류 | Q4, Q5, Q8, Q10의 분류를 데카르트 5장 권고대로 정정했다 | §13.3 |
 | 7 | N-16 추적표 참조 오류 | B4 반영 위치 "§11.8"을 "§11.1"로 고쳤다 | 추적표 B |
+| 8 | GitHub 저장소 확정(D-7) | `https://github.com/yuseungil-a11y/emailtomcp.git`(공개, 코드·릴리스 겸용)로 확정. 문서 내 자리표시자를 전부 치환했다 | §0.1, §14.4, §15.4, 결정 대기 D-7 |
+| 9 | 회신 시 원본 첨부 포함(신규 요구) | 사용자 회신·전체회신 초안에 원본 첨부파일을 기본 포함한다. 사용자가 발송 전 개별 제거 가능. Claude 자동회신(auto_send)에는 적용하지 않는다(보안 결정 §7.5·§8.5 유지) | §1.2 #23, §6.3 create_reply_draft, §11.2 |
 
 - 이번 보정에서 다루지 않은 것
   - N-03b, N-05~N-09, N-11, N-17: P3 진입 전에 보정한다.
@@ -332,7 +334,7 @@
 | 20 | 오프라인, Outbox, 재시도 | P1 | §5.3 |
 | 21 | 원문(소스) 보기 | P1 | |
 | 22 | 수신확인(MDN) | 후속 | 앱은 MDN을 보내지 않는다. MDN에 자동회신하지 않는다(§7.3) |
-| 23 | 전체회신(내 주소·별칭 제외) | P1 | |
+| 23 | 전체회신(내 주소·별칭 제외) | P1 | **원본 첨부파일을 회신 초안에 기본 포함**(2026-10-04 사용자 지시). 사용자가 보내기 전에 개별 삭제 가능. Claude 자동회신(auto_send)에는 적용하지 않는다(§7.5·§8.5 보안 결정 유지) |
 | 24 | 전달(인라인 / 첨부로) | P1 | 두 방식 모두 제공 |
 | 25 | 우선순위 | 표시 P1 / 지정 후속 | X-Priority/Importance |
 | 26 | 단축키, 열 설정 | P1(기본) / P4(사용자 정의) | |
@@ -1083,7 +1085,7 @@ CREATE TABLE settings (key TEXT PRIMARY KEY, value_json TEXT NOT NULL);  -- pyda
 | `delete_message` | `{message_id}` | 휴지통으로 이동(영구 삭제 없음) | manage | P2 |
 | `move_message` | `{message_id, folder_id}` | 폴더 이동 | manage | **P4** |
 | `create_draft` | `{account_id, to[], cc?, bcc?, subject, body_text}` | 초안 작성 | draft | P2 |
-| `create_reply_draft` | `{message_id, body_text, reply_all?}` | 회신 초안(전체회신 시 내 주소·별칭 제외) | draft | P2 |
+| `create_reply_draft` | `{message_id, body_text, reply_all?, include_attachments?=true}` | 회신 초안(전체회신 시 내 주소·별칭 제외). **원본 첨부파일을 기본 포함**(2026-10-04) — `include_attachments=false`로 끌 수 있음. auto_send 경로(§7.4·§8.5)에는 영향 없음 — Claude 자동회신은 여전히 첨부를 붙이지 않는다 | draft | P2 |
 | `create_forward_draft` | `{message_id, to[], cc?, note?, mode: inline\|attach}` | 전달 초안 | draft | P2 |
 | `update_draft` / `delete_draft` | — | `status=draft`일 때만 | draft | P2 |
 | `send_draft` | `{draft_id}` | §6.2 정책 + 레이트리밋 + floor 검사 | send | P2 |
@@ -1509,6 +1511,7 @@ v0.1 형식을 유지하고 아래를 바꿨다.
 - 받는사람/참조/숨은참조 입력란이 있고, 주소를 검증하며 송수신 이력 기반 자동완성을 지원한다.
 - 첨부는 드래그앤드롭으로 추가하고, 25MB를 넘으면 경고한다. 30초마다 자동저장한다.
 - 전달은 [인라인 전달] / [첨부로 전달] 중에서 고른다. 전체회신은 내 주소와 별칭을 자동으로 뺀다.
+- **회신(전체회신 포함) 시 원본 첨부파일을 초안에 기본으로 가져온다**(2026-10-04 사용자 지시). 첨부 목록에서 원본 첨부는 [제거] 할 수 있고, 25MB 합계 상한은 그대로 적용한다. 이 동작은 사용자가 직접 쓰는 회신에만 적용되고, Claude 자동회신(auto_send)에는 적용하지 않는다(§7.5 출력 가드가 첨부를 다루지 않도록 유지).
 - P1은 평문 작성만 지원한다(HTML 작성은 P4).
 - Claude가 만든 초안이면 상단 배너에 출처(MCP/자동회신/assist)와 출력 가드 경고를 표시한다.
 
