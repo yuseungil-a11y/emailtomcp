@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+# 보안검토 44 L-5: 저장소 기본 토큰 권한에 기대지 않고 읽기 전용으로 명시한다.
+permissions:
+  contents: read
+
 jobs:
   test:
     strategy:
@@ -16,10 +20,13 @@ jobs:
     env:
       QT_QPA_PLATFORM: offscreen
     steps:
-      - uses: actions/checkout@v4
+      # Actions는 커밋 SHA로 고정한다(§15.5, L-5). 주석은 고정 당시 태그(기존 v4/v5가 가리키던 커밋).
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip

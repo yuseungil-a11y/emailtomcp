@@ -1,0 +1,5 @@
+# 후보 매니페스트 생성(build_manifest.py) 전용 — 앱은 --no-deps로 설치하고 스키마/버전 모듈만 쓴다.
+-r build-backend.in
+pydantic>=2.7
+packaging>=24
+cryptography>=42

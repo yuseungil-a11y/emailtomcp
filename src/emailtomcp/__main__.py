@@ -17,7 +17,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser = argparse.ArgumentParser(
         prog="emailtomcp",
-        description="EmailToMCP — 로컬 메일 클라이언트 + 내장 MCP 서버 (Claude 연동)",
+        description="EmailToMCP - 로컬 메일 클라이언트 + 내장 MCP 서버 (Claude 연동)",
     )
     parser.add_argument(
         "--version",

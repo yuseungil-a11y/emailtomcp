@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -498,6 +499,95 @@ def test_key_location_rules(tmp_path: Path) -> None:
         sign_release.check_key_location(inside)
 
 
+def test_key_location_rejects_any_parent_git_tree(tmp_path: Path) -> None:
+    # L-2: 이 저장소가 아니어도 상위 폴더 어디에든 .git이 있으면(다른 clone, Pages 소스 등) 거부
+    other_clone = tmp_path / "pages-src"
+    (other_clone / ".git").mkdir(parents=True)
+    key = _write(other_clone / "deep" / "dir" / "k1.key", b"x")
+    with pytest.raises(ReleaseError, match="git 작업트리") as exc:
+        sign_release.check_key_location(key)
+    assert "k1.key" not in str(exc.value)
+    # worktree/submodule은 .git이 파일이다 — 이것도 거부
+    worktree = tmp_path / "wt"
+    _write(worktree / ".git", b"gitdir: elsewhere\n")
+    with pytest.raises(ReleaseError, match="git 작업트리"):
+        sign_release.check_key_location(_write(worktree / "k.key", b"x"))
+
+
+def test_gitignore_ignores_key_files() -> None:
+    lines = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+    assert "*.key" in lines
+
+
+# ---------------------------------------------------------------------------
+# 보안검토 44 — CLI 공통 가짜 환경
+# ---------------------------------------------------------------------------
+
+
+class _FakeGh:
+    """`gh attestation verify` / `gh release list` 가짜. 실제 gh·네트워크는 쓰지 않는다."""
+
+    def __init__(self, *, releases: list | None = None, fail_attest: tuple[str, ...] = ()) -> None:
+        self.releases = releases if releases is not None else []
+        self.fail_attest = fail_attest
+        self.calls: list[list[str]] = []
+
+    def __call__(self, cmd: list[str]) -> subprocess.CompletedProcess[str]:
+        self.calls.append(cmd)
+        if cmd[1:3] == ["attestation", "verify"]:
+            failed = Path(cmd[3]).name in self.fail_attest
+            return subprocess.CompletedProcess(
+                cmd,
+                1 if failed else 0,
+                stdout="",
+                stderr="no matching attestations" if failed else "",
+            )
+        if cmd[1:3] == ["release", "list"]:
+            return subprocess.CompletedProcess(cmd, 0, stdout=json.dumps(self.releases), stderr="")
+        raise AssertionError(f"예상하지 못한 gh 호출: {cmd}")
+
+    def attested(self) -> list[str]:
+        return [Path(c[3]).name for c in self.calls if c[1:3] == ["attestation", "verify"]]
+
+
+def _pin_test_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """운영 K1 대신 테스트 키를 '고정 키'로 쓴다(운영 상수 자체는 별도 테스트로 검증)."""
+    monkeypatch.setattr(sign_release, "PINNED_PUBLIC_KEY", TEST_KEY_ACTIVE.public_key_line())
+    monkeypatch.setattr(sign_release, "PINNED_KEY_ID", TRUSTED[0].key_id_hex)
+    monkeypatch.setattr(sign_release, "embedded_trusted_keys", lambda: TRUSTED)
+
+
+def _patch_cli(
+    monkeypatch: pytest.MonkeyPatch,
+    gh: _FakeGh,
+    *,
+    published: tuple[bytes | None, bytes | None] = (None, None),
+    seen: dict | None = None,
+) -> None:
+    _pin_test_key(monkeypatch)
+
+    def fake_minisign_signer(minisign: str, key_path: Path):
+        if seen is not None:
+            seen["key"] = key_path
+        return _fake_signer()
+
+    monkeypatch.setattr(sign_release, "resolve_minisign", lambda explicit: "minisign")
+    monkeypatch.setattr(sign_release, "minisign_signer", fake_minisign_signer)
+    monkeypatch.setattr(sign_release, "resolve_gh", lambda explicit: "gh")
+    monkeypatch.setattr(sign_release, "run_command", gh)
+    # 서버 시각 = 로컬 시각(시계 정상). utc_now를 바꾸는 테스트도 따라가도록 매번 호출한다.
+    monkeypatch.setattr(sign_release, "fetch_server_date", lambda url: sign_release.utc_now())
+    urls = {
+        sign_release.PUBLISHED_MANIFEST_URL: published[0],
+        sign_release.PUBLISHED_SIGNATURE_URL: published[1],
+    }
+    monkeypatch.setattr(sign_release, "fetch_url", lambda url: urls[url])
+
+
+def _run_dirs(out: Path) -> list[Path]:
+    return sorted(p for p in out.iterdir() if p.is_dir()) if out.is_dir() else []
+
+
 def test_sign_release_cli_end_to_end_without_leaking_key_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -505,14 +595,17 @@ def test_sign_release_cli_end_to_end_without_leaking_key_path(
     candidate = _write(tmp_path / "manifest-candidate.json", data)
     key = _write(tmp_path / "usb" / "zz-secret-key-marker.key", b"not-a-real-key")
     seen: dict[str, object] = {}
-
-    def fake_minisign_signer(minisign: str, key_path: Path):
-        seen["key"] = key_path
-        return _fake_signer()
-
-    monkeypatch.setattr(sign_release, "embedded_trusted_keys", lambda: TRUSTED)
-    monkeypatch.setattr(sign_release, "resolve_minisign", lambda explicit: "minisign")
-    monkeypatch.setattr(sign_release, "minisign_signer", fake_minisign_signer)
+    gh = _FakeGh(
+        releases=[
+            {
+                "tagName": "v1.0.1",
+                "publishedAt": "2026-11-02T00:00:00Z",
+                "isDraft": False,
+                "isPrerelease": False,
+            },
+        ]
+    )
+    _patch_cli(monkeypatch, gh, seen=seen)
     out = tmp_path / "release-out"
     rc = sign_release.main(
         [
@@ -520,6 +613,8 @@ def test_sign_release_cli_end_to_end_without_leaking_key_path(
             str(candidate),
             "--artifacts-dir",
             str(downloaded),
+            "--expect-version",
+            "1.0.1",
             "--key",
             str(key),
             "--out-dir",
@@ -530,7 +625,15 @@ def test_sign_release_cli_end_to_end_without_leaking_key_path(
     captured = capsys.readouterr()
     assert rc == 0, captured.err
     assert seen["key"] == key
-    assert (out / "stable.json").is_file() and (out / "stable.json.minisig").is_file()
+    # H-2: 후보 + 산출물 전부 빌드 증명 확인(태그 ref 고정)
+    names = {a.name for a in parse_manifest(data).latest.artifacts}
+    assert sorted(gh.attested()) == sorted(names | {"manifest-candidate.json"})
+    for call in gh.calls:
+        assert call[call.index("--source-ref") + 1] == "refs/tags/v1.0.1"
+    # L-1: 실행마다 새 하위 폴더
+    (run1,) = _run_dirs(out)
+    assert run1.name.startswith("1.0.1-")
+    assert (run1 / "stable.json").is_file() and (run1 / "stable.json.minisig").is_file()
     assert "zz-secret-key-marker" not in captured.out + captured.err
     assert "Newton" in captured.out
 
@@ -541,19 +644,615 @@ def test_sign_release_cli_end_to_end_without_leaking_key_path(
         lambda: datetime.now(UTC).replace(microsecond=0) + timedelta(days=1),
     )
     rc = sign_release.main(
-        ["--resign", str(out / "stable.json"), "--key", str(key), "--out-dir", str(out), "--yes"]
+        [
+            "--resign",
+            str(run1 / "stable.json"),
+            "--expect-version",
+            "1.0.1",
+            "--key",
+            str(key),
+            "--out-dir",
+            str(out),
+            "--yes",
+        ]
     )
     captured = capsys.readouterr()
     assert rc == 0, captured.err
     assert "zz-secret-key-marker" not in captured.out + captured.err
+    assert len(_run_dirs(out)) == 2  # 이전 실행 결과는 그대로, 새 폴더에 따로
 
 
 def test_sign_release_cli_requires_artifacts_dir(tmp_path: Path, monkeypatch, capsys) -> None:
     key = _write(tmp_path / "k.key", b"x")
     monkeypatch.setattr(sign_release, "resolve_minisign", lambda explicit: "minisign")
-    rc = sign_release.main(["--candidate", str(tmp_path / "c.json"), "--key", str(key), "--yes"])
+    rc = sign_release.main(
+        [
+            "--candidate",
+            str(tmp_path / "c.json"),
+            "--expect-version",
+            "1.0.1",
+            "--key",
+            str(key),
+            "--yes",
+        ]
+    )
     assert rc == 1
     assert "--artifacts-dir" in capsys.readouterr().err
+
+
+def test_sign_release_cli_requires_expect_version(tmp_path: Path, capsys) -> None:
+    key = _write(tmp_path / "k.key", b"x")
+    for mode in (["--candidate", "c.json", "--artifacts-dir", "d"], ["--resign", "stable.json"]):
+        with pytest.raises(SystemExit) as exc:
+            sign_release.main([*mode, "--key", str(key), "--yes"])
+        assert exc.value.code == 2
+        assert "--expect-version" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# H-2: 버전·태그·입력값 3중 일치, 빌드 증명 필수, 확인 화면
+# ---------------------------------------------------------------------------
+
+
+def test_check_expected_version_requires_all_three_to_match(tmp_path: Path) -> None:
+    data, _ = _candidate_bytes(tmp_path)
+    manifest = parse_manifest(data)
+    assert sign_release.check_expected_version(manifest, "1.0.1") == "v1.0.1"
+    with pytest.raises(ReleaseError, match="expect-version"):
+        sign_release.check_expected_version(manifest, "1.0.2")
+    with pytest.raises(ReleaseError):
+        sign_release.check_expected_version(manifest, "v1.0.1")  # 정규형 아님
+
+    # 버전 필드는 1.0.1인데 자산 URL·릴리스 페이지가 다른 태그(v1.0.0)를 가리키는 후보
+    doc = json.loads(data)
+    doc["latest"]["release_page"] = common.release_page_url("1.0.0")
+    first = doc["latest"]["artifacts"][0]
+    first["url"] = common.artifact_url("1.0.0", first["name"])
+    forged = parse_manifest(common.encode_manifest(doc))  # 스키마(접두사 검사)는 통과한다
+    with pytest.raises(ReleaseError) as exc:
+        sign_release.check_expected_version(forged, "1.0.1")
+    assert "release_page" in str(exc.value) and first["name"] in str(exc.value)
+
+
+def test_attestation_command_pins_repo_workflow_and_tag(tmp_path: Path) -> None:
+    cmd = sign_release.build_attestation_command("gh", tmp_path / "a.exe", "1.0.1")
+    assert cmd[:4] == ["gh", "attestation", "verify", str(tmp_path / "a.exe")]
+    assert cmd[cmd.index("--repo") + 1] == "yuseungil-a11y/emailtomcp"
+    assert (
+        cmd[cmd.index("--signer-workflow") + 1]
+        == "yuseungil-a11y/emailtomcp/.github/workflows/release.yml"
+    )
+    assert cmd[cmd.index("--source-ref") + 1] == "refs/tags/v1.0.1"
+    assert "--deny-self-hosted-runners" in cmd
+
+
+def test_verify_attestations_fails_closed(tmp_path: Path) -> None:
+    files = [tmp_path / "a.exe", tmp_path / "b.zip"]
+    sign_release.verify_attestations(files, "1.0.1", gh="gh", runner=_FakeGh())
+    with pytest.raises(ReleaseError, match="b.zip"):
+        sign_release.verify_attestations(
+            files, "1.0.1", gh="gh", runner=_FakeGh(fail_attest=("b.zip",))
+        )
+
+    def broken(cmd):
+        raise FileNotFoundError("gh")
+
+    with pytest.raises(ReleaseError, match="빌드 증명"):
+        sign_release.verify_attestations(files, "1.0.1", gh="gh", runner=broken)
+    with pytest.raises(ReleaseError):
+        sign_release.verify_attestations([], "1.0.1", gh="gh", runner=_FakeGh())
+
+
+def test_cli_stops_when_attestation_fails(tmp_path: Path, monkeypatch, capsys) -> None:
+    data, downloaded = _candidate_bytes(tmp_path)
+    candidate = _write(tmp_path / "manifest-candidate.json", data)
+    key = _write(tmp_path / "usb" / "k.key", b"x")
+    _patch_cli(monkeypatch, _FakeGh(fail_attest=("manifest-candidate.json",)))
+    out = tmp_path / "out"
+    rc = sign_release.main(
+        [
+            "--candidate",
+            str(candidate),
+            "--artifacts-dir",
+            str(downloaded),
+            "--expect-version",
+            "1.0.1",
+            "--key",
+            str(key),
+            "--out-dir",
+            str(out),
+            "--yes",
+        ]
+    )
+    assert rc == 1
+    assert "빌드 증명" in capsys.readouterr().err
+    assert _run_dirs(out) == []
+
+
+def test_cli_stops_on_expect_version_mismatch_before_attestation(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    data, downloaded = _candidate_bytes(tmp_path)
+    candidate = _write(tmp_path / "manifest-candidate.json", data)
+    key = _write(tmp_path / "usb" / "k.key", b"x")
+    gh = _FakeGh()
+    _patch_cli(monkeypatch, gh)
+    rc = sign_release.main(
+        [
+            "--candidate",
+            str(candidate),
+            "--artifacts-dir",
+            str(downloaded),
+            "--expect-version",
+            "1.0.2",
+            "--key",
+            str(key),
+            "--out-dir",
+            str(tmp_path / "o"),
+            "--yes",
+        ]
+    )
+    assert rc == 1
+    assert "expect-version" in capsys.readouterr().err
+    assert gh.calls == []
+
+
+def test_summary_shows_notes_released_at_and_urls(tmp_path: Path) -> None:
+    data, downloaded = _candidate_bytes(tmp_path)
+    prepared = sign_release.prepare_from_candidate(data, downloaded, now=NOW)
+    text = sign_release._summary(prepared)
+    assert "버그 수정" in text  # notes_summary
+    assert "released_at" in text and common.format_ts(prepared.manifest.latest.released_at) in text
+    for art in prepared.manifest.latest.artifacts:
+        assert art.url in text
+
+
+def test_prepare_from_candidate_reverifies_final_manifest(tmp_path: Path, monkeypatch) -> None:
+    # L-3: 후보와 최종본 둘 다 산출물 대조
+    data, downloaded = _candidate_bytes(tmp_path)
+    calls: list[str] = []
+    real = sign_release.verify_artifacts
+    monkeypatch.setattr(
+        sign_release,
+        "verify_artifacts",
+        lambda m, d: (calls.append(m.issued_at.isoformat()), real(m, d))[1],
+    )
+    sign_release.prepare_from_candidate(data, downloaded, now=NOW + timedelta(hours=1))
+    assert len(calls) == 2 and calls[0] != calls[1]
+
+
+# ---------------------------------------------------------------------------
+# M-2: 재서명 기준점 = 최신 게시 릴리스, 만료본 재서명 거부
+# ---------------------------------------------------------------------------
+
+
+def _rel(tag: str, when: str, *, draft: bool = False, pre: bool = False) -> dict:
+    return {"tagName": tag, "publishedAt": when, "isDraft": draft, "isPrerelease": pre}
+
+
+def test_latest_published_stable_tag_picks_most_recent_non_rc() -> None:
+    gh = _FakeGh(
+        releases=[
+            _rel("v1.0.0", "2026-10-01T00:00:00Z"),
+            _rel("v1.0.2", "2026-10-20T00:00:00Z"),
+            _rel("v1.0.1", "2026-10-10T00:00:00Z"),
+            _rel("v1.1.0rc1", "2026-10-25T00:00:00Z"),  # rc 태그
+            _rel("v1.1.0", "2026-10-26T00:00:00Z", pre=True),  # prerelease 표시
+            _rel("v1.2.0", "", draft=True),  # draft
+        ]
+    )
+    assert sign_release.latest_published_stable_tag(gh="gh", runner=gh) == "v1.0.2"
+    cmd = gh.calls[0]
+    assert cmd[cmd.index("--repo") + 1] == "yuseungil-a11y/emailtomcp"
+    assert "--exclude-drafts" in cmd and "--exclude-pre-releases" in cmd
+
+
+def test_latest_published_stable_tag_errors() -> None:
+    with pytest.raises(ReleaseError, match="없습니다"):
+        sign_release.latest_published_stable_tag(gh="gh", runner=_FakeGh(releases=[]))
+
+    def failing(cmd):
+        return subprocess.CompletedProcess(cmd, 4, stdout="", stderr="auth required")
+
+    with pytest.raises(ReleaseError, match="gh release list"):
+        sign_release.latest_published_stable_tag(gh="gh", runner=failing)
+
+    def garbage(cmd):
+        return subprocess.CompletedProcess(cmd, 0, stdout="not json", stderr="")
+
+    with pytest.raises(ReleaseError, match="JSON"):
+        sign_release.latest_published_stable_tag(gh="gh", runner=garbage)
+
+
+def test_check_resign_baseline(tmp_path: Path) -> None:
+    data, _ = _candidate_bytes(tmp_path)
+    manifest = parse_manifest(data)
+    sign_release.check_resign_baseline(manifest, "1.0.1", "v1.0.1")
+    with pytest.raises(ReleaseError, match="expect-version"):
+        sign_release.check_resign_baseline(manifest, "1.0.2", "v1.0.2")
+    with pytest.raises(ReleaseError, match="replay"):
+        sign_release.check_resign_baseline(manifest, "1.0.1", "v1.0.2")
+
+
+def test_resign_refuses_expired_manifest(tmp_path: Path, capsys) -> None:
+    old_data, old_sig = _signed_pair(tmp_path)
+    expired_at = NOW + timedelta(days=30)
+    with pytest.raises(ReleaseError, match="만료"):
+        sign_release.prepare_resign(old_data, old_sig, now=expired_at, trusted_keys=TRUSTED)
+    assert "경고" in capsys.readouterr().err
+    # 만료 직전은 허용
+    sign_release.prepare_resign(
+        old_data, old_sig, now=expired_at - timedelta(seconds=1), trusted_keys=TRUSTED
+    )
+
+
+def test_cli_resign_refuses_old_release_replay(tmp_path: Path, monkeypatch, capsys) -> None:
+    # 예전(정상 서명된) 1.0.1 게시본을 되살렸지만 실제 최신 게시 릴리스는 v1.0.2인 상황
+    old_data, old_sig = _signed_pair(
+        tmp_path, when=datetime.now(UTC).replace(microsecond=0) - timedelta(days=2)
+    )
+    old = _write(tmp_path / "pages" / "stable.json", old_data)
+    _write(tmp_path / "pages" / "stable.json.minisig", old_sig)
+    key = _write(tmp_path / "usb" / "k.key", b"x")
+    gh = _FakeGh(
+        releases=[_rel("v1.0.1", "2026-10-01T00:00:00Z"), _rel("v1.0.2", "2026-10-20T00:00:00Z")]
+    )
+    _patch_cli(monkeypatch, gh)
+    out = tmp_path / "out"
+    rc = sign_release.main(
+        [
+            "--resign",
+            str(old),
+            "--expect-version",
+            "1.0.1",
+            "--key",
+            str(key),
+            "--out-dir",
+            str(out),
+            "--yes",
+        ]
+    )
+    assert rc == 1
+    assert "v1.0.2" in capsys.readouterr().err
+    assert _run_dirs(out) == []
+
+
+# ---------------------------------------------------------------------------
+# M-3: 서버 시각 대조, 현재 게시본 기준 시각·버전 역행 금지
+# ---------------------------------------------------------------------------
+
+
+def test_check_clock_accepts_small_skew_and_rejects_large() -> None:
+    server = NOW
+    assert (
+        sign_release.check_clock(NOW + timedelta(minutes=4), fetch_date=lambda url: server)
+        == server
+    )
+    with pytest.raises(ReleaseError, match="어긋납니다"):
+        sign_release.check_clock(NOW + timedelta(minutes=6), fetch_date=lambda url: server)
+    with pytest.raises(ReleaseError, match="어긋납니다"):
+        sign_release.check_clock(NOW - timedelta(hours=3), fetch_date=lambda url: server)
+
+
+def test_check_clock_falls_back_and_fails_closed() -> None:
+    first, second = sign_release.CLOCK_SOURCES[:2]
+
+    def flaky(url: str) -> datetime:
+        if url == first:
+            raise OSError("down")
+        return NOW
+
+    assert sign_release.check_clock(NOW, fetch_date=flaky) == NOW
+
+    def down(url: str) -> datetime:
+        raise OSError("offline")
+
+    with pytest.raises(ReleaseError, match="확인할 수 없어"):
+        sign_release.check_clock(NOW, fetch_date=down)
+
+    def no_header(url: str) -> datetime:
+        raise ValueError("Date 헤더 없음")
+
+    with pytest.raises(ReleaseError, match="확인할 수 없어"):
+        sign_release.check_clock(NOW, fetch_date=no_header)
+
+
+def test_check_against_published_skips_when_nothing_published(tmp_path: Path) -> None:
+    data, downloaded = _candidate_bytes(tmp_path)
+    prepared = sign_release.prepare_from_candidate(data, downloaded, now=NOW)
+    same = sign_release.check_against_published(prepared, None, None, now=NOW, trusted_keys=TRUSTED)
+    assert same is prepared
+
+
+def _published_pair(tmp_path: Path, version: str, when: datetime) -> tuple[bytes, bytes]:
+    data, downloaded = _candidate_bytes(tmp_path, version)
+    prepared = sign_release.prepare_from_candidate(data, downloaded, now=when)
+    return prepared.data, TEST_KEY_ACTIVE.sign(prepared.data, prepared.trusted_comment)
+
+
+def test_check_against_published_enforces_time_and_version(tmp_path: Path) -> None:
+    data, downloaded = _candidate_bytes(tmp_path / "new", "1.0.1")
+    prepared = sign_release.prepare_from_candidate(data, downloaded, now=NOW)
+
+    # 게시본 1.0.0(어제) → 통과, 롤백 기준이 게시본 issued_at으로 설정된다
+    pub, sig = _published_pair(tmp_path / "p1", "1.0.0", NOW - timedelta(days=1))
+    result = sign_release.check_against_published(prepared, pub, sig, now=NOW, trusted_keys=TRUSTED)
+    assert result.previous_issued_at == NOW - timedelta(days=1)
+    # 같은 버전 재발행도 허용
+    pub, sig = _published_pair(tmp_path / "p2", "1.0.1", NOW - timedelta(days=1))
+    sign_release.check_against_published(prepared, pub, sig, now=NOW, trusted_keys=TRUSTED)
+
+    # 로컬 시각이 게시본 issued_at보다 늦지 않음(시계 느림)
+    pub, sig = _published_pair(tmp_path / "p3", "1.0.0", NOW + timedelta(hours=1))
+    with pytest.raises(ReleaseError, match="issued_at"):
+        sign_release.check_against_published(prepared, pub, sig, now=NOW, trusted_keys=TRUSTED)
+
+    # 새 버전이 게시본보다 낮음
+    pub, sig = _published_pair(tmp_path / "p4", "1.0.2", NOW - timedelta(days=1))
+    with pytest.raises(ReleaseError, match="낮습니다"):
+        sign_release.check_against_published(prepared, pub, sig, now=NOW, trusted_keys=TRUSTED)
+
+
+def test_check_against_published_stops_when_published_signature_invalid(tmp_path: Path) -> None:
+    """게시본이 200으로 내려왔지만(존재함) 서명이 깨지면 경고만 하고 넘어가지 않고 중단한다.
+
+    서명 없이도 Pages의 stable.json/.minisig만 손상시키면 M-3 전체(시계·다운그레이드 방지)를
+    매번 우회할 수 있던 틈을 막는 회귀 테스트.
+    """
+    data, downloaded = _candidate_bytes(tmp_path / "new", "1.0.1")
+    prepared = sign_release.prepare_from_candidate(data, downloaded, now=NOW)
+    pub, _ = _published_pair(tmp_path / "p", "1.0.2", NOW + timedelta(days=1))
+    foreign = TEST_KEY_UNTRUSTED.sign(pub, "x")
+    with pytest.raises(ReleaseError, match="서명을 확인할 수 없습니다"):
+        sign_release.check_against_published(prepared, pub, foreign, now=NOW, trusted_keys=TRUSTED)
+    # 404(파일이 원래 없음, 최초 릴리스)는 공격 시나리오가 아니므로 그대로 비교를 생략한다
+    # (test_check_against_published_skips_when_nothing_published에서 이미 확인함).
+
+
+def test_check_against_published_stops_when_pair_mismatched(tmp_path: Path) -> None:
+    """stable.json과 .minisig 중 하나만 404면 중단한다(L-A, Spinoza 보안검토).
+
+    둘 다 404여야 "최초 릴리스"로 비교를 건너뛴다 — 한쪽만 지워서(예: .minisig만 삭제)
+    최초 릴리스로 가장해 다운그레이드/issued_at 비교를 우회하는 경로를 막는 회귀 테스트.
+    """
+    data, downloaded = _candidate_bytes(tmp_path / "new", "1.0.1")
+    prepared = sign_release.prepare_from_candidate(data, downloaded, now=NOW)
+    pub, sig = _published_pair(tmp_path / "p", "1.0.0", NOW - timedelta(days=1))
+
+    # stable.json만 200, .minisig는 404
+    with pytest.raises(ReleaseError, match="짝이 맞지 않습니다"):
+        sign_release.check_against_published(prepared, pub, None, now=NOW, trusted_keys=TRUSTED)
+
+    # stable.json은 404, .minisig만 200
+    with pytest.raises(ReleaseError, match="짝이 맞지 않습니다"):
+        sign_release.check_against_published(prepared, None, sig, now=NOW, trusted_keys=TRUSTED)
+
+    # 둘 다 404면 기존 동작 그대로 유지(최초 릴리스로 비교 생략)
+    same = sign_release.check_against_published(prepared, None, None, now=NOW, trusted_keys=TRUSTED)
+    assert same is prepared
+
+
+def test_cli_stops_when_local_clock_is_off(tmp_path: Path, monkeypatch, capsys) -> None:
+    data, downloaded = _candidate_bytes(tmp_path)
+    candidate = _write(tmp_path / "manifest-candidate.json", data)
+    key = _write(tmp_path / "usb" / "k.key", b"x")
+    gh = _FakeGh()
+    _patch_cli(monkeypatch, gh)
+    monkeypatch.setattr(
+        sign_release, "fetch_server_date", lambda url: sign_release.utc_now() - timedelta(hours=1)
+    )
+    rc = sign_release.main(
+        [
+            "--candidate",
+            str(candidate),
+            "--artifacts-dir",
+            str(downloaded),
+            "--expect-version",
+            "1.0.1",
+            "--key",
+            str(key),
+            "--out-dir",
+            str(tmp_path / "o"),
+            "--yes",
+        ]
+    )
+    assert rc == 1
+    assert "시계" in capsys.readouterr().err
+    assert gh.calls == []
+
+
+def test_cli_new_signing_rejects_older_than_published(tmp_path: Path, monkeypatch, capsys) -> None:
+    data, downloaded = _candidate_bytes(tmp_path / "c")
+    candidate = _write(tmp_path / "manifest-candidate.json", data)
+    key = _write(tmp_path / "usb" / "k.key", b"x")
+    pub = _published_pair(
+        tmp_path / "p", "1.0.2", datetime.now(UTC).replace(microsecond=0) - timedelta(days=1)
+    )
+    _patch_cli(monkeypatch, _FakeGh(), published=pub)
+    out = tmp_path / "o"
+    rc = sign_release.main(
+        [
+            "--candidate",
+            str(candidate),
+            "--artifacts-dir",
+            str(downloaded),
+            "--expect-version",
+            "1.0.1",
+            "--key",
+            str(key),
+            "--out-dir",
+            str(out),
+            "--yes",
+        ]
+    )
+    assert rc == 1
+    assert "낮습니다" in capsys.readouterr().err
+    assert _run_dirs(out) == []
+
+
+# ---------------------------------------------------------------------------
+# M-4: 신뢰 기준 공개키(K1) 스크립트 고정
+# ---------------------------------------------------------------------------
+
+
+def test_pinned_k1_matches_production_embedded_keys() -> None:
+    from emailtomcp.update.keys import embedded_trusted_keys
+
+    assert sign_release.PINNED_KEY_ID == "205BD649DF53346C"
+    # 운영 keys.py의 내장 키가 고정값과 정확히 일치해야 실제 서명이 진행된다.
+    sign_release.require_pinned_trusted_keys(embedded_trusted_keys())
+
+
+def test_require_pinned_trusted_keys_rejects_any_deviation() -> None:
+    from emailtomcp.update.keys import TrustedKey, embedded_trusted_keys
+
+    (k1,) = embedded_trusted_keys()
+    rogue = TEST_KEY_UNTRUSTED.trusted_key()
+    with pytest.raises(ReleaseError, match="하나가 아닙니다"):
+        sign_release.require_pinned_trusted_keys(())
+    with pytest.raises(ReleaseError, match="하나가 아닙니다"):
+        sign_release.require_pinned_trusted_keys((k1, rogue))  # 공격자 키 추가
+    with pytest.raises(ReleaseError, match="key_id"):
+        sign_release.require_pinned_trusted_keys((rogue,))  # 다른 키로 교체
+    # key_id는 K1과 같게 위장했지만 공개키 바이트가 다른 키
+    disguised = TrustedKey(label="K1", role="active", key_id=k1.key_id, public_key=rogue.public_key)
+    assert disguised.key_id_hex == "205BD649DF53346C"
+    with pytest.raises(ReleaseError, match="공개키 값"):
+        sign_release.require_pinned_trusted_keys((disguised,))
+
+
+def test_cli_stops_when_embedded_keys_differ_from_pin(tmp_path: Path, monkeypatch, capsys) -> None:
+    data, downloaded = _candidate_bytes(tmp_path)
+    candidate = _write(tmp_path / "manifest-candidate.json", data)
+    key = _write(tmp_path / "usb" / "k.key", b"x")
+    gh = _FakeGh()
+    _patch_cli(monkeypatch, gh)
+    # 작업트리 keys.py가 공격자 키를 추가로 내장한 상황(고정값은 테스트 키 그대로)
+    monkeypatch.setattr(
+        sign_release,
+        "embedded_trusted_keys",
+        lambda: (*TRUSTED, TEST_KEY_UNTRUSTED.trusted_key()),
+    )
+    rc = sign_release.main(
+        [
+            "--candidate",
+            str(candidate),
+            "--artifacts-dir",
+            str(downloaded),
+            "--expect-version",
+            "1.0.1",
+            "--key",
+            str(key),
+            "--out-dir",
+            str(tmp_path / "o"),
+            "--yes",
+        ]
+    )
+    assert rc == 1
+    assert "하나가 아닙니다" in capsys.readouterr().err
+    assert gh.calls == []
+
+
+# ---------------------------------------------------------------------------
+# L-1: 실행마다 새 결과 폴더
+# ---------------------------------------------------------------------------
+
+
+def test_new_run_dir_is_unique(tmp_path: Path) -> None:
+    run = sign_release.new_run_dir(tmp_path / "out", "1.0.1", NOW)
+    assert run.name == "1.0.1-20261101T000000Z" and run.is_dir()
+    with pytest.raises(ReleaseError, match="이미 있습니다"):
+        sign_release.new_run_dir(tmp_path / "out", "1.0.1", NOW)
+
+
+# ---------------------------------------------------------------------------
+# H-1 / M-1 / L-4 / L-5: 워크플로 정적 검사(문법은 PyYAML로 파싱)
+# ---------------------------------------------------------------------------
+
+
+def _workflow(name: str) -> dict:
+    yaml = pytest.importorskip("yaml")
+    return yaml.safe_load((REPO_ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8"))
+
+
+def _all_steps(wf: dict) -> list[tuple[str, dict]]:
+    return [(job_id, step) for job_id, job in wf["jobs"].items() for step in job.get("steps", [])]
+
+
+def test_release_workflow_installs_only_hash_pinned_dependencies() -> None:
+    wf = _workflow("release.yml")
+    for job_id, step in _all_steps(wf):
+        run = step.get("run", "")
+        for line in run.splitlines():
+            line = line.strip()
+            if "pip install" not in line:
+                continue
+            assert "--no-deps" in line, (job_id, line)
+            assert "--require-hashes" in line or "--no-build-isolation -e ." in line, (job_id, line)
+            assert "--upgrade" not in line, (job_id, line)
+    locks = REPO_ROOT / "packaging" / "release" / "locks"
+    for name in ("release", "build-backend", "manifest", "audit"):
+        text = (locks / f"requirements-{name}.txt").read_text(encoding="utf-8")
+        assert "--hash=sha256:" in text
+    release_lock = (locks / "requirements-release.txt").read_text(encoding="utf-8")
+    for pinned in (
+        "pyinstaller==6.22.3",
+        "velopack==1.2.161",
+        "hatchling==",
+        "hatch-vcs==",
+        "editables==",
+    ):
+        assert pinned in release_lock
+    runs = "\n".join(step.get("run", "") for _, step in _all_steps(wf))
+    assert "pip_audit" in runs
+    assert "sha256sum -c" in runs and "VPK_SHA256" in runs
+
+
+def test_release_workflow_permission_split() -> None:
+    wf = _workflow("release.yml")
+    assert wf["permissions"] == {"contents": "read"}
+    # 모든 checkout은 토큰을 남기지 않는다
+    for job_id, step in _all_steps(wf):
+        if str(step.get("uses", "")).startswith("actions/checkout@"):
+            assert step["with"]["persist-credentials"] is False, job_id
+    writers = [
+        job_id
+        for job_id, job in wf["jobs"].items()
+        if job.get("permissions", {}).get("contents") == "write"
+    ]
+    assert writers == ["draft-release"]
+    draft = wf["jobs"]["draft-release"]
+    assert draft["environment"] == "release"
+    assert draft["permissions"] == {"contents": "write"}
+    uses = [str(s.get("uses", "")) for s in draft["steps"]]
+    assert not any(u.startswith(("actions/checkout@", "actions/setup-python@")) for u in uses)
+    import re
+
+    # 쓰기 job에서는 파이썬/pip을 전혀 실행하지 않는다(pipefail 같은 단어는 제외하고 검사)
+    assert not any(re.search(r"\bpip3?\b|\bpython3?\b", s.get("run", "")) for s in draft["steps"])
+    assert not any("attest" in u for u in uses)
+    # provenance는 build job(산출물)과 prepare-release(후보·SHA256SUMS)에서만
+    attest_jobs = {
+        job_id
+        for job_id, step in _all_steps(wf)
+        if "attest-build-provenance" in str(step.get("uses", ""))
+    }
+    assert attest_jobs == {"build", "prepare-release"}
+    # L-4: 기존 릴리스가 있으면 --clobber로 덮지 않고 실패
+    draft_run = "\n".join(s.get("run", "") for s in draft["steps"])
+    assert "--clobber" not in draft_run and "exit 1" in draft_run
+
+
+def test_workflows_pin_actions_by_sha() -> None:
+    import re
+
+    for name in ("release.yml", "ci.yml"):
+        wf = _workflow(name)
+        for job_id, step in _all_steps(wf):
+            uses = step.get("uses")
+            if uses:
+                assert re.fullmatch(r"[\w.-]+/[\w.-]+@[0-9a-f]{40}", uses), (name, job_id, uses)
+    assert _workflow("ci.yml")["permissions"] == {"contents": "read"}
 
 
 # ---------------------------------------------------------------------------

@@ -36,6 +36,12 @@ release-assets/
 release-upload/
 vpk-out/
 manifest-candidate.json
+# release.yml이 CI 작업트리에 만드는 임시 폴더(감사 도구 venv, vpk 로컬 피드)
+.audit-venv/
+vpk-feed/
+
+# 서명 비밀키가 실수로 커밋되지 않도록(보안검토 44 L-2). 비밀키는 오프라인 USB에만 둔다.
+*.key
 
 # hatch-vcs가 빌드/설치 시점에 생성하는 단일 버전 소스 (DESIGN.md §15.2)
 src/emailtomcp/_version.py

@@ -1,7 +1,8 @@
 # 릴리스 빌드 워크플로 (DESIGN.md §15.4 release.yml, §14.7-4)
 #
-# 이 워크플로가 하는 일: 태그 검증 → 버전 검증 → 빌드(PyInstaller + Velopack) → SHA256/SBOM/
-# provenance → 서명 전 후보 매니페스트(manifest-candidate.json) → **draft 릴리스**에 업로드.
+# 이 워크플로가 하는 일: 태그 검증 → 버전 검증 → 의존성 취약점 검사 → 빌드(PyInstaller + Velopack)
+# → SBOM/provenance(빌드 job 안에서) → 서명 전 후보 매니페스트 + SHA256SUMS(읽기 전용 job)
+# → **draft 릴리스**에 업로드(쓰기 job, checkout·pip 없음).
 #
 # 이 워크플로가 하지 않는 일(의도적):
 #   - 매니페스트 서명: 비밀키는 메인테이너의 오프라인 USB에만 있다(D-8). Secrets에 넣지 않는다.
@@ -9,7 +10,19 @@
 #   - publish: 서명 후 사람이 draft를 release로 전환한다(packaging/release/README.md).
 #   - Pages(manifest/) 반영: 서명된 파일을 Newton(vcs-manager)이 커밋/push한다.
 #
-# Actions는 커밋 SHA로 고정한다(§15.5). 주석의 버전은 고정 당시 태그다.
+# 공급망 고정(보안검토 44 H-1, §15.5)
+#   - Actions는 커밋 SHA로 고정한다. 주석의 버전은 고정 당시 태그다.
+#   - 파이썬 의존성은 packaging/release/locks/*.txt(해시 고정, `bash packaging/release/locks/compile.sh`로
+#     재생성)만 `pip install --require-hashes --no-deps`로 설치한다. 앱 자체는
+#     `--no-deps --no-build-isolation -e .`(빌드 백엔드도 잠금파일에서 설치)로 올린다.
+#   - vpk(Velopack CLI) nupkg는 sha256을 고정해 대조한 뒤 로컬 피드에서만 설치한다.
+#
+# 권한 분리(보안검토 44 M-1)
+#   - 모든 checkout은 persist-credentials: false(토큰을 .git/config에 남기지 않음).
+#   - provenance(id-token)는 산출물을 만든 build job과 후보를 만든 prepare-release job에서만.
+#   - contents: write는 draft-release job 하나뿐이며, 이 job은 checkout·pip 설치 없이 앞 job의
+#     artifact를 그대로 `gh release create`에만 쓴다. GitHub Environment `release`(승인자 지정)를
+#     거쳐야 실행된다 — Environment는 저장소 설정에서 만들어야 한다(packaging/release/README.md).
 
 name: Release
 
@@ -27,8 +40,12 @@ concurrency:
 
 env:
   PYTHON_VERSION: "3.12"
+  LOCK_DIR: packaging/release/locks
   # vpk(Velopack CLI)와 파이썬 velopack 패키지는 같은 버전을 쓴다(pyproject.toml의 release extra).
   VPK_VERSION: "1.2.161"
+  # https://api.nuget.org/v3-flatcontainer/vpk/1.2.161/vpk.1.2.161.nupkg 의 sha256(2026-10-05 고정).
+  # nuget.org 카탈로그 packageHash(SHA512)와 대조해 확인한 파일이다. 버전을 바꾸면 이 값도 바꾼다.
+  VPK_SHA256: "ac9be73846d9a7a76483f8684abd1503cd50703b992727429dcdc045589c5e08"
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -71,6 +88,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Python
         if: steps.tag.outputs.release == 'true'
@@ -90,9 +108,9 @@ jobs:
             git status --porcelain
             exit 1
           fi
-          python -m pip install --upgrade pip
-          # _version.py 생성(hatch-vcs 빌드훅)만 필요하므로 의존성은 설치하지 않는다.
-          pip install --no-deps -e .
+          # _version.py 생성(hatch-vcs 빌드훅)만 필요하다 — 빌드 백엔드만 해시 고정 설치.
+          python -m pip install --require-hashes --no-deps -r "$LOCK_DIR/requirements-build-backend.txt"
+          python -m pip install --no-deps --no-build-isolation -e .
           python - <<'PY'
           import os, sys
           from emailtomcp._version import __version__ as v
@@ -105,10 +123,40 @@ jobs:
           PY
 
   # ---------------------------------------------------------------------------
-  # 3~4단계: 매트릭스 빌드(PyInstaller → vpk pack), --version 확인, SBOM
+  # 잠금파일 취약점 검사(H-1): 알려진 취약점이 있는 고정 버전이면 빌드하지 않는다
+  # ---------------------------------------------------------------------------
+  audit:
+    needs: validate
+    if: needs.validate.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: pip-audit (all release lock files)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv .audit-venv
+          .audit-venv/bin/python -m pip install --require-hashes --no-deps -r "$LOCK_DIR/requirements-audit.txt"
+          for lock in "$LOCK_DIR"/requirements-*.txt; do
+            echo "== pip-audit $lock"
+            .audit-venv/bin/python -m pip_audit --require-hashes --disable-pip \
+              --progress-spinner off -r "$lock"
+          done
+
+  # ---------------------------------------------------------------------------
+  # 3~4단계: 매트릭스 빌드(PyInstaller → vpk pack), --version 확인, SBOM, provenance
   # ---------------------------------------------------------------------------
   build:
-    needs: validate
+    needs: [validate, audit]
     if: needs.validate.outputs.release == 'true'
     strategy:
       fail-fast: true
@@ -121,6 +169,10 @@ jobs:
             platform: macos
             arch: arm64
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      id-token: write # provenance(빌드 증명) — 산출물을 만든 이 job에서 바로 증명한다(H-2)
+      attestations: write
     env:
       QT_QPA_PLATFORM: offscreen
       VERSION: ${{ needs.validate.outputs.version }}
@@ -130,18 +182,21 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install (app + release tools)
+      - name: Install (app + release tools, hash-pinned)
         shell: bash
         run: |
           set -euo pipefail
-          python -m pip install --upgrade pip
-          pip install -e ".[release]"
+          python -m pip install --require-hashes --no-deps -r "$LOCK_DIR/requirements-release.txt"
+          python -m pip install --no-deps --no-build-isolation -e .
+          # 잠금파일이 의존성을 빠뜨렸으면 여기서 실패한다(--no-deps라 pip가 보충하지 않음).
+          python -m pip check
 
       - name: Re-check version on this runner
         shell: bash
@@ -153,6 +208,17 @@ jobs:
           if v != os.environ["VERSION"]:
               sys.exit(f"::error::_version.py({v})가 태그 버전({os.environ['VERSION']})과 다릅니다")
           PY
+
+      - name: pip-audit (installed build environment)
+        shell: bash
+        run: |
+          set -euo pipefail
+          SITE="$(python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"
+          # 감사 도구는 별도 venv에 설치해 빌드 환경(SBOM 대상)과 섞지 않는다.
+          python -m venv .audit-venv
+          if [[ -x .audit-venv/bin/python ]]; then AUDIT_PY=.audit-venv/bin/python; else AUDIT_PY=.audit-venv/Scripts/python.exe; fi
+          "$AUDIT_PY" -m pip install --require-hashes --no-deps -r "$LOCK_DIR/requirements-audit.txt"
+          "$AUDIT_PY" -m pip_audit --path "$SITE" --skip-editable --progress-spinner off
 
       - name: PyInstaller build
         shell: bash
@@ -177,10 +243,33 @@ jobs:
               print("::warning::--version 출력이 비어 있습니다(창 모드 빌드). 종료 코드만 확인했습니다.")
           PY
 
-      - name: Install Velopack CLI (Windows)
+      - name: Install Velopack CLI (Windows, sha256-pinned)
         if: matrix.platform == 'windows'
         shell: bash
-        run: dotnet tool install -g vpk --version "$VPK_VERSION"
+        run: |
+          set -euo pipefail
+          # dotnet tool install에는 해시 고정 옵션이 없다 — nupkg를 직접 받아 sha256을 대조한 뒤,
+          # nuget.org를 뺀(<clear/>) 설정으로 로컬 피드에서만 설치한다.
+          mkdir -p vpk-feed
+          NUPKG="vpk-feed/vpk.${VPK_VERSION}.nupkg"
+          curl -fsSL --retry 3 -o "$NUPKG" \
+            "https://api.nuget.org/v3-flatcontainer/vpk/${VPK_VERSION}/vpk.${VPK_VERSION}.nupkg"
+          echo "${VPK_SHA256}  ${NUPKG}" | sha256sum -c -
+          printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' \
+            '<configuration><packageSources><clear /></packageSources></configuration>' \
+            > vpk-feed/nuget.config
+          FEED_WIN="$(cygpath -w "$PWD/vpk-feed")"
+          dotnet tool install -g vpk --version "$VPK_VERSION" \
+            --configfile "$FEED_WIN\\nuget.config" --add-source "$FEED_WIN"
+          # 추적용 기록: 실제 설치된 도구 버전. vpk 1.2.161에는 --version 옵션이 없어(2026-10-05
+          # 로컬 확인) 도움말 첫 줄의 "Velopack CLI <버전>"을 남기고, 기대 버전인지 확인한다.
+          dotnet tool list -g
+          VPK_BANNER="$(vpk -h 2>&1 | head -n 3 || true)"
+          echo "$VPK_BANNER"
+          if [[ "$VPK_BANNER" != *"Velopack CLI ${VPK_VERSION}"* ]]; then
+            echo "::error::설치된 vpk 버전이 ${VPK_VERSION}가 아닙니다"
+            exit 1
+          fi
 
       - name: vpk pack (Windows)
         if: matrix.platform == 'windows'
@@ -202,7 +291,12 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$ASSET_DIR"
-          pip list --format=json > "$ASSET_DIR/sbom-pip-${{ matrix.platform }}-${{ matrix.arch }}.json"
+          python -m pip list --format=json > "$ASSET_DIR/sbom-pip-${{ matrix.platform }}-${{ matrix.arch }}.json"
+
+      - name: Provenance (build attestation)
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: ${{ env.ASSET_DIR }}/*
 
       - name: Upload build assets
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -213,39 +307,38 @@ jobs:
           retention-days: 14
 
   # ---------------------------------------------------------------------------
-  # 4~6단계: SHA256 + provenance + 후보 매니페스트 + draft 릴리스(서명·publish 안 함)
+  # 4~5단계(읽기 전용): 후보 매니페스트 + SHA256SUMS + 그 두 파일의 provenance
   # ---------------------------------------------------------------------------
-  draft-release:
+  prepare-release:
     needs: [validate, build]
     if: needs.validate.outputs.release == 'true'
     runs-on: ubuntu-latest
     permissions:
-      contents: write # draft 릴리스 생성/업로드
-      id-token: write # provenance(빌드 증명)
+      contents: read
+      id-token: write # 후보 매니페스트·SHA256SUMS 빌드 증명
       attestations: write
     env:
       TAG: ${{ github.ref_name }}
-      VERSION: ${{ needs.validate.outputs.version }}
       PRERELEASE: ${{ needs.validate.outputs.prerelease }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install manifest tooling
+      - name: Install manifest tooling (hash-pinned)
         shell: bash
         run: |
           set -euo pipefail
-          python -m pip install --upgrade pip
           # 매니페스트 스키마/버전 모듈만 쓰므로 GUI 의존성은 설치하지 않는다.
-          pip install --no-deps -e .
-          pip install "pydantic>=2.7" "packaging>=24" "cryptography>=42"
+          python -m pip install --require-hashes --no-deps -r "$LOCK_DIR/requirements-manifest.txt"
+          python -m pip install --no-deps --no-build-isolation -e .
 
       - name: Download build assets
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -281,10 +374,47 @@ jobs:
           (cd release-upload && sha256sum -- * > SHA256SUMS.txt)
           cat release-upload/SHA256SUMS.txt
 
-      - name: Provenance (build attestation)
+      - name: Provenance (SHA256SUMS)
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: release-upload/*
+          subject-path: release-upload/SHA256SUMS.txt
+
+      - name: Provenance (manifest-candidate.json)
+        if: env.PRERELEASE != 'true'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: release-upload/manifest-candidate.json
+
+      - name: Upload release bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-upload
+          path: release-upload
+          if-no-files-found: error
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # 6단계(쓰기): draft 릴리스 생성만. checkout·pip 설치 없음. Environment 승인 필요.
+  # ---------------------------------------------------------------------------
+  draft-release:
+    needs: [validate, prepare-release]
+    if: needs.validate.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    # 저장소 Settings > Environments에 `release`를 만들고 Required reviewers를 지정해야 승인
+    # 게이트가 동작한다(없으면 GitHub가 승인 없이 자동 생성한다 — README "저장소 설정" 참고).
+    environment: release
+    permissions:
+      contents: write # draft 릴리스 생성/업로드
+    env:
+      TAG: ${{ github.ref_name }}
+      VERSION: ${{ needs.validate.outputs.version }}
+      PRERELEASE: ${{ needs.validate.outputs.prerelease }}
+    steps:
+      - name: Download release bundle
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-upload
+          path: release-upload
 
       - name: Create draft release and upload assets
         shell: bash
@@ -292,17 +422,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          ls -la release-upload
+          # L-4: 같은 태그의 릴리스(draft 포함)가 이미 있으면 덮어쓰지 않고 실패한다.
+          # 메인테이너가 이미 내려받은 자산과 달라지는 것을 막기 위해서다 — 다시 돌리려면 사람이
+          # 기존 draft를 지운 뒤 재실행한다(publish된 릴리스는 지우지 말고 새 버전으로).
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::릴리스($TAG)가 이미 있습니다(draft 포함). 자산을 덮어쓰지 않습니다 — 기존 draft를 확인·삭제한 뒤 재실행하세요."
+            exit 1
+          fi
           FLAGS=(--draft --verify-tag --title "EmailToMCP $VERSION")
           if [[ "$PRERELEASE" == "true" ]]; then FLAGS+=(--prerelease); fi
           NOTES="자동 생성된 draft 릴리스입니다. 서명 전 상태입니다 — packaging/release/README.md 절차대로 메인테이너가 오프라인 서명 후 publish합니다."
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            IS_DRAFT="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)"
-            if [[ "$IS_DRAFT" != "true" ]]; then
-              echo "::error::이미 publish된 릴리스($TAG)는 덮어쓰지 않습니다(불변 릴리스)"
-              exit 1
-            fi
-            gh release upload "$TAG" release-upload/* --repo "$GITHUB_REPOSITORY" --clobber
-          else
-            gh release create "$TAG" release-upload/* --repo "$GITHUB_REPOSITORY" "${FLAGS[@]}" --notes "$NOTES"
-          fi
+          gh release create "$TAG" release-upload/* --repo "$GITHUB_REPOSITORY" "${FLAGS[@]}" --notes "$NOTES"
           echo "draft 릴리스 준비 완료: $TAG (publish하지 않았습니다)"

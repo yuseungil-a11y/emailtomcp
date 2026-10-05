@@ -1,0 +1,5 @@
+# 빌드 백엔드(pyproject.toml [build-system].requires). `pip install --no-build-isolation -e .`과 함께 쓴다.
+# editables: hatchling의 editable 설치(build_editable)가 필요로 한다(격리 빌드에서는 자동으로 받던 것).
+hatchling
+hatch-vcs
+editables
