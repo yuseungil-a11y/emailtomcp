@@ -14,14 +14,38 @@ dependencies = [
     "PySide6>=6.7",
     "platformdirs>=4.2",
     "pydantic>=2.7",
+    "keyring>=25.0",
+    "nh3>=0.2",
+    "html2text>=2024.2",
+    "charset-normalizer>=3.3",
+    "imapclient>=3.0",
+    "markdown>=3.6",
+    # 업데이트 확인(§14.4): Ed25519 서명 검증, 버전 비교, OS 인증서 저장소
+    "cryptography>=42",
+    "packaging>=24",
+    "truststore>=0.9",
+    # 업데이트 매니페스트 다운로드(update/release_client.py `_load_httpx`)가 실제로 쓰는 HTTP
+    # 클라이언트. mcp가 간접으로 끌어오지만, mcp 쪽 의존성이 바뀌어도 업데이트 확인이 조용히
+    # "확인 불가"로 굳지 않도록 직접 의존성으로 선언한다(QA C2, 보안검토 L-6).
+    "httpx2>=2.13,<3",
+    # MCP 서버(§6.1): 공식 SDK v2(저수준 Server + streamable HTTP), ASGI 서버.
+    # mcp 2.x는 httpx2/anyio/starlette를 함께 끌어온다(stdio 프록시 클라이언트도 httpx2 사용).
+    "mcp>=2.3,<3",
+    "uvicorn>=0.30",
+    # 자동회신 규칙 정규식(§7.1 M3): 선형 시간 RE2. 역참조·전후방탐색 미지원.
+    "google-re2>=1.1",
+    # claude -p 프로세스 트리 종료(§2(c) "실행 관리").
+    "psutil>=5.9",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
     "pytest-qt>=4.4",
+    "pytest-cov>=7.0",
     "ruff>=0.6",
     "mypy>=1.10",
+    "aiosmtpd>=1.4",
 ]
 
 [project.scripts]

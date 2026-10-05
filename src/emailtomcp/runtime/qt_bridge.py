@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import logging
 from collections.abc import Coroutine
 from typing import Any, TypeVar
@@ -45,3 +46,9 @@ class QtBridge(QObject):
         except Exception:
             logger.exception("call_backend 실패")
             raise
+
+    def call_backend_async(self, coro: Coroutine[Any, Any, T]) -> concurrent.futures.Future[T]:
+        """즉시 반환하는 버전. 연결 테스트·수신·발송처럼 오래 걸리는 호출에서 Qt 메인
+        스레드를 막지 않기 위해 쓴다 — 호출자가 `QTimer`로 `future.done()`을 폴링한다.
+        """
+        return self._backend.submit_async(coro)
