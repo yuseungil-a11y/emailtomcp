@@ -2162,7 +2162,7 @@ v0.1 형식을 유지하고 아래를 바꿨다.
   - `--packVersion`에는 PEP 440을 SemVer2로 변환한 값을 넣는다(`X.Y.Z` → 그대로, `X.Y.ZrcN` → `X.Y.Z-rc.N`).
   - 채널은 `stable`이다.
   - 산출물: Windows Setup.exe, full/delta nupkg, releases.{channel}.json(Velopack 피드). macOS 패키지.
-- **앱 기동**: `__main__`의 맨 처음에서 Velopack 훅(`velopack.App().run()`)을 호출한다. 설치·제거·첫 실행 훅을 처리하고 바로 돌아온다. 개발 환경에서는 아무 일도 하지 않는다.
+- **앱 기동**: `__main__`의 맨 처음에서 Velopack 훅(`velopack.App().run()`)을 호출한다. 설치·제거·첫 실행 훅을 처리하고 바로 돌아온다. 개발 환경에서는 아무 일도 하지 않는다. (2026-10-05 구현: `__main__.run_velopack_hook()` — PyInstaller 번들(`sys.frozen`)에서만, `set_auto_apply_on_startup(False)`로 Velopack 자체 자동 적용을 끈 채 호출한다. velopack 패키지가 없으면 건너뛴다.)
 - **U2 적용 흐름**
   1. 서명 매니페스트를 검증한다(§14.4).
   2. 매니페스트에 적힌 nupkg(full 또는 delta)와 Velopack 피드 파일을 `<data>/update/staging/<ver>/`(사용자 전용)에 받는다. `size` 상한을 적용하고 sha256을 대조한다.
@@ -2296,13 +2296,13 @@ v0.1 형식을 유지하고 아래를 바꿨다.
 1. **생성**: 오프라인 PC에서 minisign 키쌍(활성 K1)을 만든다. 비밀키는 강한 암호로 보호한다. (원설계는 활성 K1 + 예비 K2 2개였으나 위 결정으로 K1 단일)
 2. **보관**: 비밀키는 암호화 USB 2개(주 보관, 금고 백업)에만 둔다. **GitHub Secrets, CI, 온라인 PC에는 두지 않는다.**
 3. **공개키 배포**: 앱의 `update/keys.py`에 K1 공개키(key_id 포함)를 내장한다. (운영 서명키 내장 완료(2026-10-05): K1 active, key_id `205BD649DF53346C`. 예비 K2는 두지 않음 — D-8) 공개키 지문과 설치본 SHA256을 릴리스 저장소 README와 **사내 위키(mediawiki)**의 별도 채널에 게시한다(최초 설치 TOFU 보완).
-4. **릴리스 서명 절차**
+4. **릴리스 서명 절차** — (2026-10-05) **구현 완료, 사용법은 `packaging/release/README.md` 참고.** CI(`.github/workflows/release.yml`)는 서명 전 후보까지만 만들고, 서명은 메인테이너 PC에서 `packaging/release/sign_release.py`(minisign CLI 호출, 암호는 minisign이 직접 입력받음)로 한다. 실제 `vpk`·minisign·Actions 실행 검증은 첫 릴리스 때 한다(작성 환경에 도구 없음).
    1. CI가 빌드하고 **draft 릴리스**에 자산과 `manifest-candidate.json`을 올린다.
    2. 메인테이너가 자산을 받아 로컬에서 sha256을 다시 계산하고 후보와 대조한다.
    3. 오프라인 PC에서 `stable.json`에 서명한다.
    4. 릴리스를 publish한다(Environments 승인 게이트).
    5. 서명된 매니페스트를 Pages에 push한다.
-5. **재서명**: `expires` 30일. 만료 7일 전에 같은 내용에 `issued_at`과 `expires`만 갱신해 다시 서명한다(운영 일정에 등록).
+5. **재서명**: `expires` 30일. 만료 7일 전에 같은 내용에 `issued_at`과 `expires`만 갱신해 다시 서명한다(운영 일정에 등록). (2026-10-05 구현: `sign_release.py --resign <기존 stable.json>` — 기존 파일의 서명을 내장 키로 먼저 검증한 뒤에만 재서명한다.)
 6. **회전**: 1년마다, 또는 의심이 생기면 한다. K2로 서명한 릴리스에 새 예비 키 K3을 내장하고, 이후 K2를 활성으로 쓴다.
 7. **유출 대응**
    1. 즉시 공개를 중단한다.
@@ -2380,6 +2380,14 @@ v0.1 형식을 유지하고 아래를 바꿨다.
 4. SHA256, SBOM(CycloneDX), provenance(빌드 증명)를 생성한다.
 5. **릴리스 저장소에 draft 릴리스를 만들고** 자산과 `manifest-candidate.json`을 업로드한다. 릴리스 저장소 쓰기용 fine-grained PAT는 코드 저장소 Secret에만 두고 **앱에는 넣지 않는다.** 이 토큰이 유출돼도 서명 검증으로 막힌다.
 6. publish는 수동이다(§14.7 서명 절차 후, Environments 승인).
+
+(2026-10-05 구현 메모) `.github/workflows/release.yml` 구현. 설계와 다른 점:
+- 코드 저장소와 릴리스 저장소가 같다(`yuseungil-a11y/emailtomcp`)라서 별도 PAT 대신 job 범위 `GITHUB_TOKEN`(`contents: write`, draft-release job만)을 쓴다.
+- SBOM은 우선 `pip list --format=json` 수준이다(CycloneDX는 후속). provenance는 `actions/attest-build-provenance`.
+- rc 태그는 draft(prerelease)까지만 만들고 `manifest-candidate.json`은 만들지 않는다(stable 채널 rc 금지, rc 채널은 U2/P5). Velopack도 rc는 `rc` 채널로 패키징한다.
+- macOS는 Velopack 없이 onedir zip(`app_zip`)만 만든다(notarization 전 자동설치 금지, §14.1).
+- Windows 창 모드 exe는 `--version` 출력이 비어 있을 수 있어 스모크는 종료 코드 우선으로 확인한다.
+- PyInstaller 6.22.3, vpk/velopack 1.2.161 고정(`pyproject.toml` `release` extra), Actions는 커밋 SHA 고정.
 
 ### 15.5 공급망 (M12)
 - 의존성은 해시를 고정하고 pip-audit을 돌린다. PyInstaller와 vpk 버전을 고정한다. PyInstaller 부트로더 자체 빌드는 후속으로 검토한다.

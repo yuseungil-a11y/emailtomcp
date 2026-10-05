@@ -47,6 +47,12 @@ dev = [
     "mypy>=1.10",
     "aiosmtpd>=1.4",
 ]
+# 릴리스 빌드 전용(.github/workflows/release.yml, packaging/release/README.md).
+# §15.5: PyInstaller와 Velopack 버전을 고정한다. velopack(파이썬 훅)은 vpk CLI와 같은 버전을 쓴다.
+release = [
+    "pyinstaller==6.22.3",
+    "velopack==1.2.161",
+]
 
 [project.scripts]
 emailtomcp = "emailtomcp.__main__:main"

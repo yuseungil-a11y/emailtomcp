@@ -30,6 +30,13 @@ htmlcov/
 packaging/build/
 packaging/dist/
 
+# 릴리스 작업 산출물 (packaging/release/README.md) — 서명 결과는 Pages 소스로 옮겨서 커밋한다
+release-out/
+release-assets/
+release-upload/
+vpk-out/
+manifest-candidate.json
+
 # hatch-vcs가 빌드/설치 시점에 생성하는 단일 버전 소스 (DESIGN.md §15.2)
 src/emailtomcp/_version.py
 

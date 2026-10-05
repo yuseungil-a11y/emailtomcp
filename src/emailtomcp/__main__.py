@@ -60,7 +60,29 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def run_velopack_hook() -> None:
+    """Velopack 설치·제거·첫 실행 훅을 처리한다(DESIGN.md §14.3 "앱 기동").
+
+    - Velopack 설치기는 `emailtomcp.exe --veloapp-install ...` 같은 인자로 앱을 불러 훅을
+      실행한다. 그래서 argparse보다 **먼저** 불러야 한다(훅 인자면 처리 후 프로세스가 끝난다).
+    - PyInstaller 번들(`sys.frozen`)에서만 동작한다. 개발 환경(`python -m emailtomcp`)이나
+      velopack 패키지가 없는 환경에서는 아무 일도 하지 않는다.
+    - `set_auto_apply_on_startup(False)`: 신뢰 판단은 서명 매니페스트가 단독으로 맡는다
+      (§14.2). Velopack이 스스로 내려받아 둔 패키지를 기동 시 자동 적용하지 않게 막고,
+      적용은 U2에서 앱이 검증한 로컬 파일로만 한다.
+    """
+    if not getattr(sys, "frozen", False):
+        return
+    try:
+        import velopack
+    except ImportError:
+        return
+    velopack.App().set_auto_apply_on_startup(False).run()
+
+
 def main(argv: list[str] | None = None) -> int:
+    if argv is None:
+        run_velopack_hook()
     parser = build_parser()
     args = parser.parse_args(argv)
 

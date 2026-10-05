@@ -1,0 +1,308 @@
+# 릴리스 빌드 워크플로 (DESIGN.md §15.4 release.yml, §14.7-4)
+#
+# 이 워크플로가 하는 일: 태그 검증 → 버전 검증 → 빌드(PyInstaller + Velopack) → SHA256/SBOM/
+# provenance → 서명 전 후보 매니페스트(manifest-candidate.json) → **draft 릴리스**에 업로드.
+#
+# 이 워크플로가 하지 않는 일(의도적):
+#   - 매니페스트 서명: 비밀키는 메인테이너의 오프라인 USB에만 있다(D-8). Secrets에 넣지 않는다.
+#     서명은 packaging/release/sign_release.py를 메인테이너 PC에서 실행한다.
+#   - publish: 서명 후 사람이 draft를 release로 전환한다(packaging/release/README.md).
+#   - Pages(manifest/) 반영: 서명된 파일을 Newton(vcs-manager)이 커밋/push한다.
+#
+# Actions는 커밋 SHA로 고정한다(§15.5). 주석의 버전은 고정 당시 태그다.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  PYTHON_VERSION: "3.12"
+  # vpk(Velopack CLI)와 파이썬 velopack 패키지는 같은 버전을 쓴다(pyproject.toml의 release extra).
+  VPK_VERSION: "1.2.161"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1~2단계: 태그 형식 + 생성된 _version.py 검증
+  # ---------------------------------------------------------------------------
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.tag.outputs.release }}
+      version: ${{ steps.tag.outputs.version }}
+      prerelease: ${{ steps.tag.outputs.prerelease }}
+    steps:
+      - name: Check tag format
+        id: tag
+        shell: bash
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$TAG" =~ \.dev[0-9]+$ ]]; then
+            echo "개발 기준 태그($TAG)는 릴리스하지 않습니다 — 종료합니다."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ ! "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(rc(0|[1-9][0-9]*))?$ ]]; then
+            echo "::error::태그 형식이 올바르지 않습니다: $TAG (허용: vX.Y.Z 또는 vX.Y.ZrcN)"
+            exit 1
+          fi
+          VERSION="${TAG#v}"
+          PRERELEASE=false
+          if [[ "$VERSION" == *rc* ]]; then PRERELEASE=true; fi
+          {
+            echo "release=true"
+            echo "version=$VERSION"
+            echo "prerelease=$PRERELEASE"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        if: steps.tag.outputs.release == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        if: steps.tag.outputs.release == 'true'
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Verify _version.py matches tag (clean, no .dev/+)
+        if: steps.tag.outputs.release == 'true'
+        shell: bash
+        env:
+          EXPECTED: ${{ steps.tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$(git status --porcelain)" ]]; then
+            echo "::error::체크아웃 작업트리가 깨끗하지 않습니다(dirty)"
+            git status --porcelain
+            exit 1
+          fi
+          python -m pip install --upgrade pip
+          # _version.py 생성(hatch-vcs 빌드훅)만 필요하므로 의존성은 설치하지 않는다.
+          pip install --no-deps -e .
+          python - <<'PY'
+          import os, sys
+          from emailtomcp._version import __version__ as v
+          expected = os.environ["EXPECTED"]
+          print(f"_version.py: {v!r}, tag: {expected!r}")
+          if "+" in v or ".dev" in v:
+              sys.exit(f"::error::개발 빌드 버전입니다({v}) — 태그 커밋이 아니거나 dirty")
+          if v != expected:
+              sys.exit(f"::error::_version.py({v})가 태그({expected})와 다릅니다")
+          PY
+
+  # ---------------------------------------------------------------------------
+  # 3~4단계: 매트릭스 빌드(PyInstaller → vpk pack), --version 확인, SBOM
+  # ---------------------------------------------------------------------------
+  build:
+    needs: validate
+    if: needs.validate.outputs.release == 'true'
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+            arch: x64
+          - os: macos-latest
+            platform: macos
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    env:
+      QT_QPA_PLATFORM: offscreen
+      VERSION: ${{ needs.validate.outputs.version }}
+      ASSET_DIR: release-assets/${{ matrix.platform }}-${{ matrix.arch }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install (app + release tools)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install -e ".[release]"
+
+      - name: Re-check version on this runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os, sys
+          from emailtomcp._version import __version__ as v
+          if v != os.environ["VERSION"]:
+              sys.exit(f"::error::_version.py({v})가 태그 버전({os.environ['VERSION']})과 다릅니다")
+          PY
+
+      - name: PyInstaller build
+        shell: bash
+        run: pyinstaller packaging/emailtomcp.spec --noconfirm --clean
+
+      - name: Smoke test --version
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os, subprocess, sys
+          exe = os.path.join("dist", "emailtomcp", "emailtomcp" + (".exe" if os.name == "nt" else ""))
+          r = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=120)
+          out = (r.stdout + r.stderr).strip()
+          print(f"exit={r.returncode} output={out!r}")
+          if r.returncode != 0:
+              sys.exit("::error::--version 종료 코드가 0이 아닙니다")
+          if out and os.environ["VERSION"] not in out:
+              sys.exit("::error::--version 출력에 기대 버전이 없습니다")
+          if not out:
+              # Windows 창 모드(console=False) 빌드는 stdout이 없을 수 있다 — 종료 코드만 확인.
+              print("::warning::--version 출력이 비어 있습니다(창 모드 빌드). 종료 코드만 확인했습니다.")
+          PY
+
+      - name: Install Velopack CLI (Windows)
+        if: matrix.platform == 'windows'
+        shell: bash
+        run: dotnet tool install -g vpk --version "$VPK_VERSION"
+
+      - name: vpk pack (Windows)
+        if: matrix.platform == 'windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python packaging/release/build_velopack.py --pack-dir dist/emailtomcp --output-dir "$ASSET_DIR"
+
+      - name: Zip onedir (macOS app_zip)
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$ASSET_DIR"
+          ditto -c -k --keepParent dist/emailtomcp "$ASSET_DIR/EmailToMCP-${VERSION}-macos-${{ matrix.arch }}.zip"
+
+      - name: SBOM (installed packages)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$ASSET_DIR"
+          pip list --format=json > "$ASSET_DIR/sbom-pip-${{ matrix.platform }}-${{ matrix.arch }}.json"
+
+      - name: Upload build assets
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: assets-${{ matrix.platform }}-${{ matrix.arch }}
+          path: ${{ env.ASSET_DIR }}
+          if-no-files-found: error
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # 4~6단계: SHA256 + provenance + 후보 매니페스트 + draft 릴리스(서명·publish 안 함)
+  # ---------------------------------------------------------------------------
+  draft-release:
+    needs: [validate, build]
+    if: needs.validate.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # draft 릴리스 생성/업로드
+      id-token: write # provenance(빌드 증명)
+      attestations: write
+    env:
+      TAG: ${{ github.ref_name }}
+      VERSION: ${{ needs.validate.outputs.version }}
+      PRERELEASE: ${{ needs.validate.outputs.prerelease }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install manifest tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          # 매니페스트 스키마/버전 모듈만 쓰므로 GUI 의존성은 설치하지 않는다.
+          pip install --no-deps -e .
+          pip install "pydantic>=2.7" "packaging>=24" "cryptography>=42"
+
+      - name: Download build assets
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: assets-*
+          path: release-assets
+
+      - name: Build manifest-candidate.json (unsigned)
+        if: env.PRERELEASE != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python packaging/release/build_manifest.py \
+            --scan windows:x64:release-assets/assets-windows-x64 \
+            --scan macos:arm64:release-assets/assets-macos-arm64 \
+            --expect-tag "$TAG" \
+            --output release-assets/manifest-candidate.json
+          cat release-assets/manifest-candidate.json
+
+      - name: Flatten assets + SHA256SUMS
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-upload
+          find release-assets -type f -print0 | while IFS= read -r -d '' f; do
+            name="$(basename "$f")"
+            if [[ -e "release-upload/$name" ]]; then
+              echo "::error::자산 파일명이 중복됩니다: $name"
+              exit 1
+            fi
+            cp "$f" "release-upload/$name"
+          done
+          (cd release-upload && sha256sum -- * > SHA256SUMS.txt)
+          cat release-upload/SHA256SUMS.txt
+
+      - name: Provenance (build attestation)
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: release-upload/*
+
+      - name: Create draft release and upload assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          FLAGS=(--draft --verify-tag --title "EmailToMCP $VERSION")
+          if [[ "$PRERELEASE" == "true" ]]; then FLAGS+=(--prerelease); fi
+          NOTES="자동 생성된 draft 릴리스입니다. 서명 전 상태입니다 — packaging/release/README.md 절차대로 메인테이너가 오프라인 서명 후 publish합니다."
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            IS_DRAFT="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)"
+            if [[ "$IS_DRAFT" != "true" ]]; then
+              echo "::error::이미 publish된 릴리스($TAG)는 덮어쓰지 않습니다(불변 릴리스)"
+              exit 1
+            fi
+            gh release upload "$TAG" release-upload/* --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$TAG" release-upload/* --repo "$GITHUB_REPOSITORY" "${FLAGS[@]}" --notes "$NOTES"
+          fi
+          echo "draft 릴리스 준비 완료: $TAG (publish하지 않았습니다)"
