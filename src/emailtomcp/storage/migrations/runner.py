@@ -11,7 +11,12 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from emailtomcp.core.errors import PermanentError
-from emailtomcp.storage.migrations import m0001_init
+from emailtomcp.storage.migrations import (
+    m0001_init,
+    m0002_parse_limited,
+    m0003_autoreply_toggle,
+    m0004_folder_initial_sync,
+)
 
 if TYPE_CHECKING:
     import sqlite3
@@ -21,6 +26,9 @@ MigrationFn = Callable[["sqlite3.Connection"], None]
 # 버전 번호 -> 그 버전으로 올리는 upgrade 함수.
 MIGRATIONS: dict[int, MigrationFn] = {
     1: m0001_init.upgrade,
+    2: m0002_parse_limited.upgrade,
+    3: m0003_autoreply_toggle.upgrade,
+    4: m0004_folder_initial_sync.upgrade,
 }
 
 CURRENT_SCHEMA_VERSION = max(MIGRATIONS)

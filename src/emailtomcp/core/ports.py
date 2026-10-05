@@ -48,6 +48,14 @@ class ProcessRunner(Protocol):
         """프로세스와 그 자식 전체를 종료한다(psutil 기반)."""
         ...
 
+    def stdout_bytes(self, handle: int) -> bytes:
+        """(P3 Phase B 추가) 종료 후 수집한 stdout(상한까지). stream-json 사후 검증 근거."""
+        ...
+
+    def release(self, handle: int) -> None:
+        """(P3 Phase B 추가) 핸들과 파이프·리더 스레드를 정리한다(여러 번 불러도 안전)."""
+        ...
+
 
 @runtime_checkable
 class ShellProbe(Protocol):
@@ -96,3 +104,44 @@ class JobTokenIssuer(Protocol):
     def revoke(self, job_id: int) -> None:
         """잡 종료/타임아웃/강제종료 시 토큰을 즉시 폐기한다."""
         ...
+
+
+@runtime_checkable
+class JobSubmissionSink(Protocol):
+    """잡 제출 본문을 메모리로만 넘기는 포트(§7.9 G5 "본문은 메모리(pending_verification)에만").
+
+    `mcp_server`(submit_auto_reply)가 G5 조건부 UPDATE에 성공한 뒤 이 포트로 본문을 넘기고,
+    구현(`autoreply.job_runner.JobRunner`)은 app.py가 주입한다. 본문을 이벤트 버스에 싣지 않는
+    이유는 버스가 UI(qt_bridge 와일드카드 구독)까지 퍼지기 때문이다. DB에는 해시만 남는다.
+    """
+
+    def accept_submission(
+        self,
+        job_id: int,
+        *,
+        decision: str,
+        body_text: str,
+        reason: str | None,
+        body_sha256: str,
+    ) -> None: ...
+
+
+@runtime_checkable
+class AutoSendVerifier(Protocol):
+    """G7 권위 판정 포트(§7.11 M-D).
+
+    **유일한 프로덕션 구현**은 `rules/autosend_verify.py`이고, app.py가
+    `AutoReplyRepository(db, verifier=...)` 생성자에 한 번 주입한다(아키텍처 테스트로 강제).
+    repo 함수는 호출 인자로 판정 함수를 받지 않는다(§7.10 I-1).
+
+    `conn`은 G7 writer 트랜잭션의 연결이다. 반환값은 `core.autoreply_types.AutoSendVerdict`.
+    """
+
+    def verify(
+        self,
+        conn: Any,
+        job: Any,
+        *,
+        guard: Any,
+        preflight: Any,
+    ) -> Any: ...

@@ -77,6 +77,13 @@
 | 7 | N-16 추적표 참조 오류 | B4 반영 위치 "§11.8"을 "§11.1"로 고쳤다 | 추적표 B |
 | 8 | GitHub 저장소 확정(D-7) | `https://github.com/yuseungil-a11y/emailtomcp.git`(공개, 코드·릴리스 겸용)로 확정. 문서 내 자리표시자를 전부 치환했다 | §0.1, §14.4, §15.4, 결정 대기 D-7 |
 | 9 | 회신 시 원본 첨부 포함(신규 요구) | 사용자 회신·전체회신 초안에 원본 첨부파일을 기본 포함한다. 사용자가 발송 전 개별 제거 가능. Claude 자동회신(auto_send)에는 적용하지 않는다(보안 결정 §7.5·§8.5 유지) | §1.2 #23, §6.3 create_reply_draft, §11.2 |
+| 10 | Claude 연결상태 아이콘(신규 요구) | MCP 서버 가동 여부(McpStatusChanged)와 실제 Claude 클라이언트 접속 여부(McpClientConnected/Disconnected, 5분 무활동 시 끊김 처리)를 분리해 상태줄에 표시한다 | §4.2, §11.1 |
+| 11 | 메일 서버 연결상태 아이콘(신규 요구) | 계정별 정상/연결중/오류 3단계를 폴더 트리에, 전체 집계를 상태줄에 표시한다. `AccountConnected`/`AccountError` 이벤트 기반, 런타임 메모리 상태(재시작 시 초기화) | §4.2, §11.1, `docs/design/UI_디자인가이드.md` |
+| 12 | 인앱 사용 설명서(신규 요구) | 메뉴·F1로 여는 도움말 뷰어를 신설한다. `docs/manual/*.md`를 화면별로 작성하고, UI 기능 변경 시 매뉴얼도 함께 수정하는 것을 필수 원칙으로 못박았다(프로젝트 `CLAUDE.md`에도 동일 명시) | §11.9, §10, §12.3, `D:\claude_emailtomcp\CLAUDE.md` |
+| 13 | 앱 아이콘 자체 제작 완료(신규 요구) | "이메일 자동화" 모티프(편지봉투+스파크)를 유티정보 팔레트(#5678ff→#315aff 그라디언트, 포인트 #f7a443)로 직접 그렸다(Pillow 스크립트, 외부 이미지 사용 없음). Windows(.ico)/macOS(.icns)/PNG 여러 해상도를 만들었고 PyInstaller spec에 연결했다 | §11.0, `packaging/icons/make_icon.py`, `src/emailtomcp/ui/resources/icons/`, `packaging/emailtomcp.spec` |
+| 14 | P1 구현 중 DDL 변경 문서 반영(제우스 P1 기능검증, `docs/reviews/06_QA_P1기능검증_제우스.md`) | `messages.parse_limited` 컬럼(마이그레이션 0002, user_version=2)을 DDL에 추가했다. P1 Go 차단 항목(IMAP 이동 서버 미반영, 사용설명서 PyInstaller 미번들)은 Edison 후속 작업으로 넘겼다 | §5.1 |
+| 15 | **2026-10-05 보정**: 자동 업데이트 보안검토·QA 반영(`docs/reviews/08_보안검토_자동업데이트_스피노자.md` M-1·M-2·L-8, `docs/reviews/07_QA_자동업데이트_데카르트.md` C2·C4) | ① 보안 경보(경보+자동확인 정지)를 "key_id가 내장 키와 일치하는데 Ed25519 검증 실패"와 "[9] 해시 충돌" 두 경우로 좁혔다. 서명 파일 형식 오류·UTF-8 오류·**미내장 key_id**는 "확인 불가"(2단계 거부)로 낮췄다 — 키 회전(§14.7-6)·사내 TLS 검사 장비 오탐 방지. 미내장 key_id는 "이 버전이 오래되어 새 서명키를 모릅니다 — 수동 업데이트가 필요합니다"로 구분 표시 ② 다운로드 벽시계 전체 상한(요청당 30초, 초과 시 TransientError), 서명 파일 상한을 매니페스트(64KB)와 분리해 2KB ③ 범용 설정 쓰기(`UiApi.set_setting`)로 `update.*` 키를 쓰지 못하게 막음 ④ floor 미달 배너 문구를 구현과 맞춤 ⑤ base_url 덮어쓰기는 CLI 옵션이 아니라 환경변수 `EMAILTOMCP_UPDATE_BASE_URL`(dev 빌드 전용) ⑥ `httpx2`를 직접 의존성으로 선언 ⑦ 정식 빌드에 운영 키(active·standby)가 없으면 실패하는 출시 게이트 테스트 추가(dev 빌드는 스킵) — 2026-10-05 D-8 결정으로 active 키 1개만 요구하도록 완화 | §4.6, §11.8, §14.4, `pyproject.toml` |
+| 16 | **2026-10-05 보정: P3 착수 전 §7 정밀화**(Aristotle). 근거: 사용자 신규 지시(자동회신 전역 토글, 기본 off) + P2 보안검토 교훈(reviews 11·14·14b·15·18: H-1 소유권, H-2 읽기 스냅샷 TOCTOU, N-1 저장→발송 비원자, N-4/I-1 fail-open API, M-1 메모리 기준 상한) | ① §7.0 전역 토글(기본 off, 보호키, 세대·워터마크, 끄기/켜기 순서, 기동 복구, 경합 분석, 불변식) ② §7.2 토글·워터마크·백필 단계 ③ §7.9 신뢰 경계·재검증 시점 G0~G8(권위 판정은 writer 안 G7·G8) ④ §7.10 P2 교훈 대응표 ⑤ §7.11 구현 인터페이스·마이그레이션 0003 ⑥ §11 토글 UI·매뉴얼 반영 예정 ⑦ §12.3 토글 테스트 ⑧ D-11·D-12 | §0.1, §4.2, §5.1, §7.0, §7.2, §7.9~§7.11, §11, §12.2, §12.3, 결정 대기 |
 
 - 이번 보정에서 다루지 않은 것
   - N-03b, N-05~N-09, N-11, N-17: P3 진입 전에 보정한다.
@@ -272,6 +279,7 @@
 | 기술 | Python 3.12 + PySide6, PyInstaller onedir 빌드(Windows exe / macOS app) |
 | Claude 연동 | 앱이 MCP 서버를 노출한다. 자동회신은 `claude -p`(headless CLI, **구독 로그인**)로 처리하고, Anthropic API 키는 쓰지 않는다 |
 | 자동회신 | 규칙에 맞으면 즉시발송, 나머지는 무시(ignore, 설정에서 draft로 전환 가능) — 2026-10-04 사용자 재확정 |
+| 자동회신 전역 토글 | **자동회신 기능 전체를 설정에서 켜고 끈다(`autoreply.enabled`). 기본값은 꺼짐(off).** 꺼져 있으면 규칙엔진이 동작하지 않고(백그라운드 평가 포함), 기존 규칙은 보존되며 다시 켜야 적용된다 — 2026-10-05 사용자 지시(§7.0). 기본값 off는 설계 제안이며 사용자가 바꿀 수 있다(결정 대기 D-11) |
 | 주 메일 서비스 | 네이버, 다음, 카카오, 하이웍스 — 2026-10-04 사용자 확정(D-2) |
 | 폴더 | `D:\claude_emailtomcp` |
 | 업데이트 | GitHub 기반 자동 업데이트 |
@@ -295,6 +303,8 @@
 
 ### 0.3 CLI 플래그 각주
 §2(c)의 `claude` 플래그는 Anthropic 공식 문서(code.claude.com/docs CLI reference·headless·MCP)로 **존재를 확인**했다(다윈 §1). 다만 설치된 실제 바이너리로는 아직 실측하지 않았다. 실측은 §13.2 R1 계획으로 **P3 진입 전에** 수행한다.
+
+EmailToMCP 자체 CLI 플래그 `--mcp-port`(2026-10-05 구현 반영): **기본값은 `None`**이다. 주지 않으면 설정값 `mcp.port`(기본 8765, 1024~65535만 유효)를 쓰고, 주면 그 값이 설정보다 우선한다. `--mcp-port 0`(임의 포트)은 dev·테스트 빌드에서만 받고 정식 빌드에서는 무시하고 설정값을 쓴다(§4.6). 포트를 자동으로 바꾸지 않는 고정 포트 원칙(C-05)은 그대로다.
 
 ---
 
@@ -524,7 +534,7 @@ env    : allowlist (아래)
 **설정 격리 폴백(R1-6/R1-7 실패 시)**
 1. `--setting-sources`가 user를 배제하지 못하면, 앱이 잡 실행 전에 `~/.claude/settings.json`을 **읽기 전용으로** 검사한다. hooks가 있거나, permissions.allow에 MCP 외 도구가 있거나, 활성 플러그인이 있으면 **auto_send를 금지**하고 결과를 draft로만 남긴다. UI에 이유를 표시한다.
 2. `CLAUDE_CONFIG_DIR` 분리는 구독 자격증명 위치와 충돌할 수 있다. 따라서 R1에서 별도로 확인한 경우에만 대안으로 쓴다.
-3. 둘 다 불가능하면 R10을 "수용"으로 문서화하고, auto_send는 C-10 사후 검증과 출력 가드(§7.5)를 통과한 경우에만 허용한다.
+3. 둘 다 불가능하면 R10을 "수용"으로 문서화하되, **claude를 실행하는 잡의 auto_send는 금지하고 draft만 허용**한다(2026-10-05 보안리뷰 M-E: 사용자 hooks·플러그인이 잡 토큰과 env를 가진 채 실행될 수 있어, C-10 사후 검증의 근거인 stream 자기보고를 믿을 수 없다). 고정 템플릿 모드(claude 미실행)의 auto_send는 허용한다. 판정은 §7.9 G7 ④에서 한다.
 
 **내장 도구 제거 폴백(R1-4에서 `--tools ""` 미지원 시)**
 - `--disallowedTools`에 알려진 내장 도구 전체를 나열한다: Bash, BashOutput, KillShell, Read, Write, Edit, MultiEdit, NotebookEdit, Glob, Grep, LS, WebFetch, WebSearch, Task, Agent, TodoWrite, Skill, SlashCommand, ExitPlanMode 등. 목록은 `autoreply/env_policy.py`의 상수로 관리한다.
@@ -556,6 +566,7 @@ env    : allowlist (아래)
 ## 3. 데이터 흐름
 
 ### 3.1 수신 → 자동 회신
+> 전제: 전역 토글 `autoreply.enabled`가 on일 때만 이 흐름이 시작된다(off이면 RuleEngine이 MessageReceived를 구독하지 않는다, §7.0). 다이어그램의 "재검사"는 §7.9의 G3·G4·G7·G8 writer 관문에서 수행한다.
 ```mermaid
 sequenceDiagram
   participant S as SyncService
@@ -687,7 +698,15 @@ D:\claude_emailtomcp\
 - **원칙**: "서비스는 core만 알고 runtime을 모른다." UI 알림은 `core.events` → `qt_bridge` → Qt Signal 경로로만 보낸다.
 - 아키텍처 테스트(import 규칙 검사)를 CI에서 강제한다.
 
-**이벤트 목록(초기)**: MessageReceived, MessageChanged, DraftChanged, ApprovalRequested, ApprovalResolved, SendCompleted, SendFailed, JobQueued, JobSubmitted, JobFinished, QueueStateChanged, AutosendStateChanged, McpStatusChanged, AccountError, UpdateAvailable, UpdateStatusChanged, SecurityAlert.
+**이벤트 목록(초기)**: MessageReceived, MessageChanged, DraftChanged, ApprovalRequested, ApprovalResolved, SendCompleted, SendFailed, JobQueued, JobSubmitted, JobFinished, QueueStateChanged, AutosendStateChanged, AutoReplyEnabledChanged(P3, §7.0), McpStatusChanged, McpClientConnected, McpClientDisconnected, AccountConnected, AccountError, UpdateAvailable, UpdateStatusChanged, SecurityAlert.
+
+- **AutoReplyEnabledChanged**(신규, 2026-10-05 — §7.0): 페이로드 `{enabled, generation, changed_at, drained: {jobs_cancelled, outbox_reverted}}`. **DB 커밋 이후에만** 발행한다. UI는 이 이벤트로 표시만 갱신하고, 동작 차단은 §7.9의 writer 관문이 한다(이벤트 수신 여부에 안전성이 의존하지 않는다).
+- **MessageReceived 페이로드 보강**(P3): `is_backfill: bool` — 폴더별 최초 동기화(`folders.initial_sync_done=0`, m0004 — 로컬 메일 수와 무관)·UIDVALIDITY 변경 재동기화로 들어온 메일이면 True(§7.2 1단계).
+
+- **AccountConnected / AccountError**(메일 서버 연결상태 아이콘, 2026-10-04 — §11.1 참조): SyncService나 SendService가 계정 단위로 수신·발송을 시도할 때마다 성공이면 `AccountConnected`, 실패면 `AccountError`(계정 ID, 오류 메시지, 시각 포함)를 발행한다. §2(b) S-15의 "계정 단위 예외 격리"를 UI에 그대로 드러내는 용도다.
+
+- **McpStatusChanged**(서버 자체 상태, 2026-10-04 명확화): MCP 서버 프로세스가 켜져 있는지/포트가 열려 있는지만 나타낸다. 서버가 켜져 있어도 **아직 아무 클라이언트도 붙지 않은 상태**일 수 있다.
+- **McpClientConnected / McpClientDisconnected**(신규, 2026-10-04 — "Claude 연결 상태표시 아이콘" 요구 반영): 대화형 토큰으로 요청이 한 번이라도 들어오면(stdio 프록시 핸드셰이크 성공 또는 HTTP 직결 첫 인증 성공) `McpClientConnected`를 발행하고, 마지막 요청 이후 **설정값(기본 5분)** 동안 요청이 없으면 `McpClientDisconnected`를 발행한다. 둘은 **서버가 켜져 있다는 것과는 별개의 신호**다. 이 두 이벤트의 구현은 §6.1(ASGI 가드가 요청마다 마지막 활동 시각을 기록) 몫이며 P2에서 구현한다.
 
 ### 4.3 스레드와 DB writer(S-01)
 - **DB Writer 스레드 1개**: 모든 쓰기는 `writer.submit(fn) -> Future`로 직렬화한다. 각 작업은 짧은 트랜잭션 하나다.
@@ -718,12 +737,13 @@ D:\claude_emailtomcp\
 | ProcessRunner(spawn/wait/kill_tree) | subprocess+psutil | FakeRunner / 실제 fake_claude.py(통합) |
 | ShellProbe | 로그인 셸 탐지(사용자 요청 시에만) | 고정 응답 |
 | SecretStore | keyring | 인메모리(autouse fixture) |
-| HttpClient + base_url | httpx(truststore) | fake_github_releases |
+| HttpClient + base_url | httpx(truststore). 실제로는 `httpx` → `httpx2` 순으로 찾아 쓰며 `httpx2`를 직접 의존성으로 선언했다(2026-10-05 보정) | fake_github_releases |
 | JobTokenIssuer | mcp_server.auth | 인메모리 |
 
 - `EMAILTOMCP_DATA_DIR` 환경변수로 데이터 디렉터리를 바꿀 수 있다.
-- `--mcp-port 0`은 dev·테스트 빌드에서만 허용한다.
+- `--mcp-port 0`은 dev·테스트 빌드에서만 허용한다. `--mcp-port`의 기본값은 `None`이고, 주지 않으면 설정 `mcp.port`를 쓴다(§0.3).
 - 업데이트 base_url 환경변수 덮어쓰기는 **dev 빌드에서만** 받는다.
+  - (2026-10-05 보정) CLI 옵션이 아니라 환경변수 `EMAILTOMCP_UPDATE_BASE_URL`로 구현했다. 정식 빌드에서는 이 값을 무시하고 기본값(GitHub Pages)을 쓴다.
 
 ---
 
@@ -737,6 +757,8 @@ D:\claude_emailtomcp\
 ### 5.1 DDL (0001_init)
 ```sql
 PRAGMA user_version = 1;  -- 앱이 지원하는 최대값보다 크면 기동을 거부한다(H8-8)
+-- 2026-10-04 보정: 0002_parse_limited 마이그레이션(P1 구현)으로 user_version=2까지 적용됨.
+-- `messages.parse_limited`(아래)는 0002에서 ALTER TABLE ADD COLUMN으로 추가된 컬럼이다.
 
 CREATE TABLE accounts (
   id INTEGER PRIMARY KEY,
@@ -802,6 +824,7 @@ CREATE TABLE messages (
   auto_reply_status TEXT CHECK (auto_reply_status IS NULL OR auto_reply_status IN
     ('ignored','blocked','queued','running','sent','drafted','skipped','failed','cancelled')),
   ai_summary TEXT, ai_summary_at TEXT,
+  parse_limited INTEGER NOT NULL DEFAULT 0,                    -- MIME 상한 초과로 "파싱 제한" 모드로 저장됨(§8.2, P1 구현 시 추가, 0002)
   UNIQUE (account_id, folder_id, remote_uid)
 );
 CREATE INDEX ix_msg_folder_date ON messages(folder_id, received_at DESC);
@@ -944,13 +967,16 @@ CREATE TABLE settings (key TEXT PRIMARY KEY, value_json TEXT NOT NULL);  -- pyda
 ```
 - **삭제**: `send_log`(S-12. 레이트리밋은 drafts + draft_recipients로 계산), `prompt_templates`(S-16. 기본 템플릿은 코드 상수), `messages.is_deleted`(C-08).
 - **settings 주요 키**
+  - `autoreply.enabled`(bool, **기본 false**. 키가 없거나 bool이 아니면 false — fail-closed), `autoreply.generation`(int, m0003 이후 기본 1), `autoreply.watermark_message_id`(int), `autoreply.enabled_changed_at` — 전역 토글(§7.0). **보호 키**
   - `autoreply.unmatched_action`
-  - `autoreply.queue_state`, `autoreply.autosend_state`
+  - `autoreply.queue_state`, `autoreply.autosend_state` — **보호 키**(긴급정지·재개·회로차단 전용 경로)
   - `autoreply.auto_summary_enabled`
+  - `autoreply.timeout_sec` — P3에서 기존 구현 키 `autoreply_timeout_sec`를 옮긴다(옛 키를 1회 폴백으로 읽음)
   - `mcp.port`, `mcp.send_mode`, `mcp.allowlist`
   - `ui.theme`
   - `update.auto_check`, `update.last_issued_at`, `update.max_seen_version`, `update.seen_hashes`, `update.state`
   - `retention.*`
+- **P3 마이그레이션 `0003_autoreply_toggle`**(user_version=3, ADD COLUMN·인덱스만이라 rebuild 불필요): `auto_reply_jobs.enable_gen INTEGER NOT NULL DEFAULT 0`, `auto_reply_jobs.submitted_at TEXT`, `auto_reply_jobs.submission_sha256 TEXT`, `CREATE UNIQUE INDEX ux_jobs_autoreply_msg ON auto_reply_jobs(message_id) WHERE kind='auto_reply'`(메일 1건당 auto_reply 잡 1개, 재평가·이중 구독에도 멱등).
 
 ### 5.2 상태값 정의(C-02 일원화)
 **messages.auto_reply_status** (화면 표시용 파생값이다. 진실 소스는 jobs이고, 같은 트랜잭션에서 함께 갱신한다)
@@ -1000,9 +1026,12 @@ CREATE TABLE settings (key TEXT PRIMARY KEY, value_json TEXT NOT NULL);  -- pyda
 | sending | outbox | Transient(attempts < 3, 백오프 1분/5분/15분) |
 | sending | failed | Permanent 또는 재시도 소진 |
 | sending | send_unknown | 기동 시 복구(전송 여부를 알 수 없음, **자동 재발송 금지**) |
-| failed | outbox / draft | 사용자 [재시도] / [편집] |
-| send_unknown | outbox / sent | 사용자 확인 |
-| outbox(origin=autoreply) | draft | `outbox_expires_at`(1시간) 경과 |
+| failed | outbox / draft | 사용자 [재시도] / [편집]. 단 approved_by='policy_auto_send'이면 [재시도](→outbox)는 허용하지 않고 [편집](→draft, 초기화)만 허용한다. 다시 보내려면 draft에서 [보내기](user_send) |
+| send_unknown | outbox / sent / draft | 사용자 확인. approved_by='policy_auto_send'이면 outbox는 불가하고, sent 확인 또는 [편집](→draft: auto_reply_log에 autosend_reset_unknown을 남긴 뒤 초기화, §7.3)만 할 수 있다 |
+| outbox(approved_by='policy_auto_send') | draft | outbox_expires_at(1시간) 경과, 끄기·긴급정지·설정 변경 드레인, G8 거부 |
+| outbox | draft | Outbox 가상폴더에서 사용자 [편집]. SendService가 아직 가져가지 않은 경우만(transition CAS, 경합 시 PolicyError) |
+
+- **approved_by 초기화(§7.9)**: approved_by='policy_auto_send' 행이 draft로 가는 모든 전이에서 transition이 approved_by·approved_at·outbox_expires_at을 자동으로 NULL로 만든다. 다른 approved_by 값의 동작(P2 MCP 집계)은 바꾸지 않는다.
 
 - `update_draft`(MCP)와 UI 편집은 `status='draft'`일 때만 할 수 있다. `pending_approval` 상태에서 수정하려면 먼저 승인을 취소해야 한다(H9).
 
@@ -1034,9 +1063,10 @@ CREATE TABLE settings (key TEXT PRIMARY KEY, value_json TEXT NOT NULL);  -- pyda
 ## 6. MCP 서버 설계
 
 ### 6.1 서버 구성 (mcp v2)
-- **구현**: 공식 Python SDK **`MCPServer`**(`from mcp.server.mcpserver import MCPServer`, 의존성 `mcp>=2.3,<3`).
-  - 생성자에는 이름과 저수준 handler(`on_list_tools`/`on_call_tool` 키워드 인자)만 넘긴다.
-  - 전송 관련 옵션은 `streamable_http_app(stateless_http=True, json_response=True, transport_security=…)` 호출 시점에 넘긴다(v2 API).
+- **구현**: 공식 Python SDK의 **저수준 `Server`**(`from mcp.server.lowlevel import Server`, 의존성 `mcp>=2.3,<3`)를 쓴다(2026-10-05 구현 반영).
+  - 처음 설계는 고수준 `MCPServer`(`mcp.server.mcpserver`)였으나, 설치된 `mcp 2.3.0`에서 `on_list_tools`/`on_call_tool` 키워드 인자를 받는 것은 저수준 `Server`뿐이다(`MCPServer`는 데코레이터 기반이라 저수준 handler 인자가 없다). 스코프별 도구 노출(D-07)을 저수준 handler로 구현해야 하므로 `Server`로 확정했다(`mcp_server/server.py` 모듈 주석 참조).
+  - 생성자에는 이름·버전·instructions와 저수준 handler(`on_list_tools`/`on_call_tool` 키워드 인자)만 넘긴다. 두 handler 모두 fail-closed이고, 주체(Principal)는 L1이 request scope에 붙인 값만 신뢰한다(클라이언트가 주입할 수 없음). 스코프 표에 없는 도구가 등록되어 있으면 기동 자체를 거부한다.
+  - 전송 관련 옵션은 `streamable_http_app(stateless_http=True, json_response=True, transport_security=…)` 호출 시점에 넘긴다(v2 API, 설계와 동일).
 - **ASGI 조립**: `asgi_guard`(자체 미들웨어)가 SDK 앱을 감싼다. **감싸면 SDK 내장 lifespan이 꺼지므로**, Backend 시작 코드의 호스트 lifespan에서 `mcp.session_manager.run()`을 직접 열고 닫는다. 이 책임은 `runtime/backend.py`에 있다(D-06).
 - **소켓**: 앱이 소켓을 직접 만들어 uvicorn에 넘긴다.
   - Windows는 `SO_EXCLUSIVEADDRUSE`를 쓰고 `SO_REUSEADDR`는 쓰지 않는다(M2).
@@ -1062,9 +1092,11 @@ CREATE TABLE settings (key TEXT PRIMARY KEY, value_json TEXT NOT NULL);  -- pyda
 |---|---|
 | `disabled` | 초안만 만들 수 있다 |
 | `confirm` (**기본, 확정**) | 승인 알림을 띄운다. 120초 안에 응답이 없으면 `pending_approval`로 두고 도구 응답은 `pending`이다. 24시간이 지나면 draft로 돌아간다(C-04) |
-| `allowlist` | To/CC/BCC **모든 수신자**가 허용 목록(주소·도메인)에 있을 때만 바로 발송한다. **첨부가 포함된 전달은 항상 confirm**이다(H9) |
+| `allowlist` | To/CC/BCC **모든 수신자**가 허용 목록(주소·도메인)에 있고 **첨부가 하나도 없을 때만** 바로 발송한다. 첨부가 있으면 종류(회신·전달·새 초안)와 상관없이 **항상 confirm**이다(H9, 보안검토 M-2 — 회신 원본 첨부 기본 포함·사용자 로컬 첨부도 사람이 확인) |
 
 - **승인은 스냅샷에 묶는다(H9).** 해시 대상은 정규화한 To/CC/BCC, 제목, 본문, 첨부(이름·크기·sha256)이고, 계산은 draft_service가 한다. 승인 시점의 해시가 다르면 승인은 무효다.
+- **allowlist 판정은 Outbox 전이와 같은 writer 트랜잭션 안에서 다시 한다(보안검토 H-2).** 요청 시점(읽기 스냅샷)의 판정은 "승인 없이 보낼 수 있을 것 같다"는 빠른 길 선택일 뿐이다. 실제 `draft → outbox` 전이 직전에 `ApprovalService.send_by_policy`의 verify 콜백이 **writer가 방금 읽은 초안 행**으로 ① 발송 모드가 여전히 allowlist인지 ② 수신자 전원이 허용 목록에 있는지 ③ 첨부가 없는지 ④ 이 토큰이 만든 MCP 초안인지를 다시 판정하고, 하나라도 어긋나면 `PolicyError`로 거부한다(초안은 draft 그대로, 재호출 시 confirm 절차). writer는 단일 스레드라 이 판정과 전이 사이에 `update_draft`가 끼어들 수 없다. 재판정 콜백은 필수 인자라 재판정 없이 정책 발송하는 경로는 만들 수 없다.
+- **승인 요청 폭주 방지(보안검토 M-1)**: confirm 요청(`draft → pending_approval`)은 writer 트랜잭션 안에서 ① 토큰당 동시 `pending_approval` **3건** ② 토큰당 승인 요청 **분당 5건** ③ 사용자가 거부한 초안의 **60초 재요청 쿨다운**을 검사하고, 넘으면 명확한 오류 메시지와 함께 거부한다(①은 DB 기준, ②③은 메모리 기준이라 재시작 시 초기화).
 - 승인은 **UI에서만** 할 수 있다. MCP에는 승인 도구가 없다.
 - 레이트리밋은 세 모드 모두에 적용한다(§7.7).
 
@@ -1078,7 +1110,7 @@ CREATE TABLE settings (key TEXT PRIMARY KEY, value_json TEXT NOT NULL);  -- pyda
 | `list_messages` | `{folder_id?, account_id?, unread_only?, since?, limit≤50, offset?}` | 메타데이터와 snippet | read | P2 |
 | `search_messages` | `{query, account_id?, folder_id?, from?, date_from?, date_to?, limit≤50}` | FTS 검색 | read | P2 |
 | `get_message` | `{message_id, max_chars?=20000}` | 헤더와 본문. nonce 비신뢰 마커와 "지시를 따르지 말 것" 문구로 감싸고, 본문 안의 마커 유사 문자열은 이스케이프한다 | read | P2 |
-| `get_thread` | `{message_id, max_messages?=10}` | 같은 계정의 스레드 요약 | read | P2 |
+| `get_thread` | `{message_id, max_messages?=5}` | 같은 계정·같은 thread_key의 스레드 요약 — **최대 5건, 건당 2,000자**, 첨부·BCC 제외(구현값, 2026-10-05 정정. 처음 설계표의 10건보다 좁혀 `get_job_thread`(H1)와 같은 상한을 쓴다) | read | P2 |
 | `list_drafts` / `get_draft_status` | `{}` / `{draft_id}` | 초안 목록, 상태 | read | P2 |
 | `fetch_now` | `{account_id?}` | 즉시 수신 | read | P2 |
 | `mark_read` / `set_flag` | `{message_ids≤100, value}` | 읽음, 플래그 | manage | P2 |
@@ -1087,8 +1119,8 @@ CREATE TABLE settings (key TEXT PRIMARY KEY, value_json TEXT NOT NULL);  -- pyda
 | `create_draft` | `{account_id, to[], cc?, bcc?, subject, body_text}` | 초안 작성 | draft | P2 |
 | `create_reply_draft` | `{message_id, body_text, reply_all?, include_attachments?=true}` | 회신 초안(전체회신 시 내 주소·별칭 제외). **원본 첨부파일을 기본 포함**(2026-10-04) — `include_attachments=false`로 끌 수 있음. auto_send 경로(§7.4·§8.5)에는 영향 없음 — Claude 자동회신은 여전히 첨부를 붙이지 않는다 | draft | P2 |
 | `create_forward_draft` | `{message_id, to[], cc?, note?, mode: inline\|attach}` | 전달 초안 | draft | P2 |
-| `update_draft` / `delete_draft` | — | `status=draft`일 때만 | draft | P2 |
-| `send_draft` | `{draft_id}` | §6.2 정책 + 레이트리밋 + floor 검사 | send | P2 |
+| `update_draft` / `delete_draft` | `{draft_id, to?, cc?, bcc?, subject?, body_text?}` / `{draft_id}` | `status=draft`일 때만. **`origin='mcp'`이고 같은 토큰(`mcp_token_id`)으로 만든 초안만**(보안검토 H-1) | draft | P2 |
+| `send_draft` | `{draft_id}` | **`origin='mcp'`·같은 토큰 초안만**(H-1) + §6.2 정책(allowlist는 writer 안 재판정) + 승인 요청 상한 + 레이트리밋 + floor 검사 | send | P2 |
 | `get_job_message` | `{}` | 잡에 묶인 메일 1건(비신뢰 마커). 첨부는 정화된 파일명만 | J | P3 |
 | `get_job_thread` | `{}` | 아래 조건을 만족할 때만 노출 | J(조건부) | P3 |
 | `get_job_instructions` | `{}` | stdin 폴백 전용(§2(c)) | J(폴백) | P3 |
@@ -1098,6 +1130,11 @@ CREATE TABLE settings (key TEXT PRIMARY KEY, value_json TEXT NOT NULL);  -- pyda
 - `move_message`가 P4인 것은 **MCP 노출 시점**만 뜻한다. UI에서의 이동과 그 서버 반영(IMAP)은 P1에 끝난다(§2(b), N-01). `delete_message`(P2)도 P1의 서버 반영 경로를 그대로 쓴다.
 - 범용 `send_email` 도구는 두지 않는다. 발송은 반드시 초안을 거친다(유지).
 - **기본 발급 스코프는 read+draft다.** send와 manage는 UI에서 명시적으로 부여해야 한다.
+- **MCP 도구는 MCP가 만든 초안만 바꿀 수 있다(보안검토 H-1, 2026-10-05).** `update_draft`/`delete_draft`/`send_draft`는 대상 초안이 `origin='mcp'`이고 `mcp_token_id`가 요청 토큰과 같을 때만 동작하고, 그 밖에는 `PolicyError`로 거부한다.
+  - 이유: 이 제약이 없으면 read+draft(기본 스코프)만으로 `list_drafts`에서 사용자가 UI로 쓰던 초안을 찾아 BCC·본문을 바꿔 둘 수 있고, 사용자가 나중에 [보내기]를 누르면 `user_send` 경로(승인·레이트리밋 없음)로 그대로 나가 send 스코프 없이 유출된다.
+  - `list_drafts`/`get_draft_status`(read)는 사용자 초안도 계속 보여 준다(`origin` 필드로 구분). 읽기는 막지 않고 변경만 막는다.
+  - 토큰을 재발급(proxy 프로필 재발급 포함)하면 이전 토큰으로 만든 초안은 MCP로는 더 이상 다룰 수 없고, 사용자가 앱에서 처리한다. 다른 MCP 클라이언트(토큰)끼리도 서로의 초안을 건드릴 수 없다.
+  - `origin`과 `mcp_token_id`는 초안 생성 직후 이후 바뀌지 않으므로 이 검사는 전이 트랜잭션 밖에서 해도 경합이 없다(allowlist 발송은 §6.2대로 writer 안에서 한 번 더 확인).
 
 **`get_job_thread` 접근 조건(H1)**
 1. 노출 대상
@@ -1125,7 +1162,7 @@ CREATE TABLE settings (key TEXT PRIMARY KEY, value_json TEXT NOT NULL);  -- pyda
    - 설치 경로는 Velopack의 `current` 경로라서 업데이트 후에도 바뀌지 않는다(V8에서 확인).
 2. 프록시는 QApplication을 만들지 않고 DB도 열지 않는다. 사용자 전용 로컬 소켓(앱의 QLocalServer)에 접속해 `mcp_handshake`를 보낸다.
    - 프록시가 nonce를 보낸다.
-   - 앱은 `HMAC(keyring 공유비밀, nonce)`와 현재 포트를 돌려준다.
+   - 앱은 `HMAC(keyring 공유비밀, nonce)`와 현재 포트를 돌려준다. 포트는 **HTTP 호스트(uvicorn)가 실제로 서비스 중일 때만** 돌려주고, 아니면 "MCP 비활성"으로 응답한다(보안검토 M-3). 호스트가 예기치 않게 끝나면 종료 콜백이 즉시 상태를 내리고(`McpStatusChanged(running=False, error=…)`), 정상 종료(`stop()`)는 소켓을 닫기 **전에** 먼저 실행 상태를 내린다 — 닫힌 포트를 다른 로컬 프로세스가 먼저 잡아 프록시 토큰을 받아 가는 것을 막기 위해서다.
    - 프록시는 HMAC을 검증하고, 실패하면 종료한다(포트 선점·사칭 방지).
 3. 프록시는 keyring에서 프록시 토큰(프로필별: `--client <name>`, 기본 `default`)을 읽어 HTTP로 중계한다. 도구 호출만 중계한다(resources/prompts는 없다).
 4. 앱이 실행 중이 아니면 "EmailToMCP 앱을 실행하세요" 오류를 반환한다. 앱 자동 실행은 P4 검토 항목이다.
@@ -1144,6 +1181,95 @@ HTTP 직결(고급)
 
 ## 7. 자동 회신 규칙 엔진
 
+### 7.0 자동회신 전역 토글 (`autoreply.enabled`, 2026-10-05 사용자 지시)
+
+**요구**: 자동회신 기능 전체를 설정에서 켜고 끈다. 기본값은 off다(자동으로 메일을 보내는 기능이므로 기본 비활성 — D-11에서 최종 확인). off이면 규칙엔진이 돌지 않고(백그라운드 평가·매칭 포함), 이미 만든 규칙은 지우지 않으며, 다시 켜야 적용된다.
+
+**적용 범위**
+| 대상 | 토글 off일 때 |
+|---|---|
+| RuleEngine(MessageReceived 구독, LoopGuard·규칙·AuthGate 계획) | **구독 자체를 하지 않는다.** 평가 0회, RE2 컴파일 0회 |
+| kind=auto_reply 잡 | 생성 거부. 남아 있던 queued/running은 cancelled(reason=`disabled`) |
+| `approved_by='policy_auto_send'`인 초안 중 `outbox` | draft로 되돌린다(approved_by·approved_at 초기화, §5.3. 사람이 검토 후 직접 보낼 수 있음). 사람이 [보내기]로 넣은 origin=autoreply 초안(user_send)은 건드리지 않는다 |
+| origin=autoreply 초안 중 `sending` | 회수할 수 없다(SMTP 진행 중). 끄기 결과창에 건수를 표시한다 |
+| rules, 계정별 auto_reply_enabled·trusted_authserv_id, unmatched_action·금칙어·상한 등 설정 | **보존.** 편집과 드라이런(claude 미실행)은 off에서도 할 수 있다 |
+| auto_reply_log, 기존 messages.auto_reply_status | 보존(감사) |
+| 수동 [요약]·[Claude 초안 만들기](kind=summary/manual_draft) | **영향 없음(잠정, D-12)** — 사용자가 직접 누르는 기능이고 결과가 항상 draft라 자동발송 위험이 없다 |
+| 자동요약(`autoreply.auto_summary_enabled`) | **영향 없음(잠정, D-12)** — 별도 토글(기본 off)을 유지한다 |
+| 대화형 MCP(§6) | 영향 없음 |
+
+**유효 조건(마스터 스위치)**: kind=auto_reply 처리는 `autoreply.enabled` ∧ 계정 `auto_reply_enabled` ∧ 규칙 `enabled`일 때만 한다. auto_send는 여기에 §7.6을 더한다. 이 조건은 **하나의 순수 함수** `rules/gate.py: check_autoreply_gate(conn, …)`로만 판정하고, G3·G4·G7·G8(§7.9)이 모두 이 함수를 공유한다(P2에서 L1과 L2의 Host 값을 같은 함수로 만든 원칙과 같다).
+
+**설정 키와 쓰기 경로**
+| 키 | 의미 | 쓰기 주체 |
+|---|---|---|
+| `autoreply.enabled` | 전역 토글. 기본 false, 없거나 형식 오류면 false | `AutoReplyController.set_enabled`만 |
+| `autoreply.generation` | 토글이 바뀔 때마다 +1. m0003에서 초기값 1(아래 세대 규칙) | 같은 트랜잭션 |
+| `autoreply.watermark_message_id` | 켤 때의 `MAX(messages.id)`(없으면 0) | 같은 트랜잭션 |
+| `autoreply.enabled_changed_at` | 마지막 변경 시각(표시용) | 같은 트랜잭션 |
+- 위 4개와 `autoreply.queue_state`, `autoreply.autosend_state`는 **보호 키**다. `UiApi.set_setting`은 `update.*`와 같은 방식(보안검토 L-8)으로 PolicyError를 낸다. 보호 키 목록은 `app.py`의 상수 한 곳에서 관리한다. 나아가 `autoreply.` 접두사 키 전체를 범용 경로에서 기본 거부하고, 사용자가 UI에서 직접 정하는 키만 `app.py`의 화이트리스트(`AUTOREPLY_GENERIC_WRITABLE_KEYS`, Phase A에는 비어 있음)로 허용한다(보안검토 L-4).
+- **세대 규칙(보안리뷰 L-B, ABA 방지)**: `jobs.enable_gen`의 DEFAULT 0은 "세대 없음"을 뜻하는 예약값이다. `autoreply.generation`은 m0003에서 1로 시작하고 늘어나기만 하므로 **ON 상태의 세대는 항상 1 이상**이다. `check_autoreply_gate`는 ① generation 키가 없거나, 정수가 아니거나, 1 미만이면 `disabled`로 판정하고(fail-closed) ② job_generation이 0이거나 NULL이면 `generation_mismatch`로 판정한다. m0003은 1회성 초기화만 한다: 유효한 값(1 이상의 정수)은 그대로 보존하고, 무효값(키 없음/0/음수/비정수/bool)만 안전한 값으로 정규화한다(안전한 값 = `max(1, COALESCE(MAX(auto_reply_jobs.enable_gen),0)+1)`, 유효값이 이보다 작으면 이 값으로 올린다 — 보안검토 L-1). 이후 런타임에는 세대를 줄이거나 재사용하는 경로가 없다 — 저장소는 키 없음·0도 손상으로 보고 켜기를 거부하며, 끄기도 손상·누락 세대를 새로 쓰지 않는다(QA D1). m0003은 v2 잔존 키 `autoreply.enabled`·`autoreply.queue_state`·`autoreply.autosend_state`도 지운다(보안검토 L-5).
+- MCP에는 설정·규칙·계정을 쓰는 도구가 없고, 앞으로도 만들지 않는다(manage 스코프 확장 금지). 자동발송의 신뢰 근거(규칙, 화이트리스트, 토글)를 사람이 아닌 주체가 바꿀 수 없게 하기 위해서다.
+
+**런타임 구성요소: `autoreply/controller.py` AutoReplyController** (Backend asyncio 루프에서 동작, app.py가 조립)
+- 상태: OFF → STARTING → ON → STOPPING → OFF. `set_enabled` 호출은 `asyncio.Lock` 하나로 직렬화한다(토글을 동시에 두 번 처리하지 않음).
+- 메모리의 `_active`·`_generation`은 **빠른 길 판단에만** 쓴다. 차단은 언제나 writer 관문(§7.9)이 한다. 그래서 메모리 상태가 늦게 바뀌어도 발송으로 이어지지 않는다.
+
+**끄기 순서 — "DB를 먼저 닫고, 그다음 런타임을 멈춘다"**
+1. writer 트랜잭션 1개(`autoreply_repo.disable_and_drain`)
+   a. `enabled=false`, `generation += 1`, `enabled_changed_at=now`
+   b. kind=auto_reply 잡 중 queued·running → cancelled(error='disabled'). 해당 messages.auto_reply_status → cancelled
+   c. `approved_by='policy_auto_send'`·status=outbox 초안 → draft(`autoreply_repo.drain_autosend_outbox`, 전이 함수가 `outbox_expires_at·approved_by·approved_at`을 NULL로 만든다 — §5.3 초기화 규칙)
+   d. 취소한 잡마다 auto_reply_log(outcome=cancelled, reason_code=`disabled`) 기록
+   e. 커밋. 결과로 DrainReport(취소 잡 수, 되돌린 outbox 수, sending 중 건수)를 돌려준다
+2. 커밋한 뒤: MessageReceived 구독 해제 → 진행 중인 평가 태스크 취소 → 실행 중이던 잡의 **잡 토큰 폐기(JobTokenIssuer.revoke)를 먼저 하고** 프로세스 트리를 종료한다 → `AutoReplyEnabledChanged(False)`를 발행한다.
+3. 1단계만 끝나고 2단계가 늦거나 실패해도, 이후 제출(G5)·결과 확정(G7)·발송(G8)이 모두 `enabled=false`나 세대 불일치로 거부되므로 발송되지 않는다(fail-closed).
+
+**켜기 순서**
+1. UI 확인창(§11.7)에서 사용자가 승인한다. 이때 사전점검 결과를 보여 주되 켜기를 막지는 않는다: auto_reply_enabled 계정 수, 활성 규칙 수(그중 auto_send), trusted_authserv_id가 없어 auto_send가 초안으로 강등될 계정, claude CLI 미고정(이 경우 고정 템플릿 규칙만 동작), unmatched_action 값.
+2. writer 트랜잭션(`autoreply_repo.enable`): **compare-and-set** — 설정창을 열 때 읽은 `expected_generation`이 현재 값과 다르면 PolicyError("다른 곳에서 바뀌었습니다. 다시 확인하세요"). 같으면 `enabled=true`, `generation += 1`, `watermark_message_id=MAX(messages.id)`, `enabled_changed_at=now`. **queue_state와 autosend_state는 건드리지 않는다**(paused_security나 stopped_emergency는 켠 뒤에도 그대로이고, 재개는 따로 한다).
+3. 커밋한 뒤: 규칙을 읽어 RE2로 컴파일 → MessageReceived 구독 → **1회 따라잡기**: `id > watermark AND auto_reply_status IS NULL`인 INBOX 메일을 평가한다(커밋과 구독 사이에 저장된 메일을 놓치지 않기 위해. 중복 평가는 `ux_jobs_autoreply_msg`로 막는다) → 이벤트를 발행한다.
+4. **소급 적용 없음**: `id ≤ watermark`인 메일(꺼져 있는 동안 받은 메일 포함)은 다시 켜도 평가하지 않는다.
+
+**앱 기동 시**
+- enabled=false: 컨트롤러를 OFF로 둔다. 규칙 로드, RE2 컴파일, CLI 탐지와 해시 검사를 하지 않는다. 복구 트랜잭션 하나로 남은 kind=auto_reply queued·running 잡을 cancelled(reason=`disabled_at_startup`)로, approved_by='policy_auto_send'인 outbox를 draft로 바꾼다(초기화 규칙 적용). **queued로 되돌리지 않는다.**
+- enabled=true: 기존 복구(running→queued, §2(c))를 한 뒤 시작한다. 따라잡기(켜기 3단계)도 같은 방식으로 한 번 한다. requeue할 때 `enable_gen`은 **원래 값을 유지한다**(현재 세대로 덮어쓰지 않는다). 세대는 DB에 영속되므로 재시작만으로는 바뀌지 않아 정상 잡은 계속 유효하다. 꺼졌다 켜진 이력이 있는 잡은 G4에서 cancelled된다.
+
+**경합 분석(단일 writer 직렬화를 전제로 함)**
+| # | 상황 | 결과 | 막는 관문 |
+|---|---|---|---|
+| R-a | 평가 중에 끔 | 잡이 생성되지 않음(status NULL) | G3: gate 술어 |
+| R-b | queued 잡이 있을 때 끔 | 끄기 트랜잭션에서 cancelled | 끄기 1b |
+| R-c | running 중 끔, 그 뒤에 submit 도착 | 토큰 폐기로 401, 늦어도 G5 status≠running으로 거부 | G5 |
+| R-d | 결과 확정 직전에 끔 | 세대 불일치로 초안·발송 0 | G7 |
+| R-e | outbox 대기 중 끔 | draft로 되돌림 | 끄기 1c, G8 |
+| R-f | sending 중 끔 | 회수 불가(최대 진행 중인 건수만), 결과창에 표시 | 수용(긴급정지와 같음) |
+| R-g | 껐다가 곧바로 켬(ABA), 옛 프로세스가 아직 살아 있음 | 옛 잡은 enable_gen이 옛 값이라 G7·G8에서 거부 | 세대 |
+| R-h | 설정창 2개 또는 설정창과 다른 경로가 동시에 바꿈 | 나중 저장은 CAS 실패로 거부, 다시 읽음 | enable CAS |
+| R-i | 잡 실행 중에 규칙을 고치거나 지움 | rule_version이 다르거나 규칙이 없으면(gate 사유 `rule_changed`/`rule_missing`/`rule_disabled`) **초안 없이 cancelled**(§7.11 gate 사유코드와 같음 — P3 Phase B 검증 데카르트 31번 L-1에 따라 cancel로 통일). 커밋 뒤 러너가 실행 중 프로세스를 정리한다(토큰 폐기→kill) | G7 |
+| R-j | 잡 실행 중에 계정 auto_reply_enabled를 끄거나 trusted_authserv_id를 바꿈 | gate 불통과면 cancelled, 인증 재계산이 실패하면 draft | G7 |
+
+**불변식(테스트 대상)**
+- I1: `autoreply.enabled=false`인 동안 `approved_by='policy_auto_send'`로 outbox에 들어가는 행은 0건이고, outbox→sending으로 바뀌는 `approved_by='policy_auto_send'` 행도 0건이다.
+- I2: off인 동안 RuleEngine 평가 0회, kind=auto_reply claude 실행 0회.
+- I3: 토글로 rules 테이블의 행 수와 version이 바뀌지 않는다.
+- I4: `id ≤ watermark`인 메일은 auto_reply 잡을 갖지 않는다.
+- I5: 세대가 다른 잡의 결과는 발송되지 않는다.
+- I6: `autoreply.enabled`를 바꾸는 경로는 AutoReplyController 하나뿐이다(범용 설정 쓰기와 MCP는 불가).
+- I7: 키가 없거나, 형식이 잘못됐거나, 마이그레이션 직후면 off다.
+- I8: `approved_by='policy_auto_send'`인 행은 status ∈ {outbox, sending, sent, failed, send_unknown}에만 있다(draft·pending_approval에는 없다).
+
+**성능**: off이면 MessageReceived 구독자가 없고, 자동회신 타이머가 없고, RE2·CLI 초기화도 없다. 잡 디스패처는 이벤트를 받을 때만 깨어나므로(폴링 없음) auto_reply 잡이 없으면 일하지 않는다.
+
+**긴급정지·일시정지와의 관계**
+| 구분 | 전역 토글 off | 긴급정지(stopped_emergency) | 일시정지(paused_user) |
+|---|---|---|---|
+| 성격 | 기능을 쓰지 않음(설정) | 사고 대응 | 잠시 멈춤 |
+| 규칙 평가 | 하지 않음 | 기존 §7.7 | 기존 §7.7 |
+| 위치 | 설정 > 자동회신 | 툴바·상태줄 | Claude 패널 |
+| 복귀 | 켜기 확인창 | [재개] 확인창 | [재개] |
+- 서로 독립이다. 토글을 켜도 긴급정지나 paused 상태는 풀리지 않는다.
+
 ### 7.1 조건 스키마
 v0.1 형식을 유지하고 아래를 바꿨다.
 - **field**: `from_address`, `from_domain`, `to`, `cc`, `subject`, `body`, `has_attachment`, `received_hour`, `received_weekday`, **`auth`**(값: `dmarc_pass`, `dkim_aligned_pass`)
@@ -1157,15 +1283,15 @@ v0.1 형식을 유지하고 아래를 바꿨다.
   - weekday는 0(월)~6(일)이며 같은 규칙을 따른다.
 
 ### 7.2 평가 순서
-1. 계정의 자동회신이 꺼져 있거나 정크 폴더 메일이면 끝낸다(NULL).
-2. **LoopGuard**(§7.3)를 적용한다. 끌 수 없고 규칙보다 먼저 적용된다. 걸리면 blocked로 끝낸다.
-3. **잡 생성 상한**(§7.7)을 넘으면 blocked(reason=job_cap)로 끝낸다(M4).
-4. 규칙을 priority 오름차순으로 평가하고, 처음 맞는 규칙을 적용한다.
-5. 맞는 규칙이 없으면 **`unmatched_action`을 따른다. 기본값은 `ignore`이고, 설정에서 `draft`로 바꿀 수 있다**(C-01. 2026-10-04 사용자 재확정, §0.1).
-6. 결과가 `ignore`이면 ignored로 끝낸다.
-7. 결과가 `auto_send`이면 **auto_send 전제조건**(§7.6)을 검사하고, 하나라도 불충족이면 계획을 `draft`로 강등하고 사유를 기록한다.
-8. 잡을 큐에 넣는다.
-9. 실행 시점에 레이트리밋, 쿨다운, 회로차단, autosend_state를 다시 검사한다. 넘으면 draft로 강등한다.
+0. **전역 토글(§7.0)**: off이면 이 절차 자체가 실행되지 않는다(구독 없음). 실행 중에도 메모리의 세대가 바뀌었으면 즉시 중단한다.
+1. 평가 대상이 아니면 NULL로 끝낸다(로그 없음): 계정 auto_reply_enabled가 0, 정크 폴더나 INBOX가 아닌 폴더, `message.id ≤ autoreply.watermark_message_id`, **`is_backfill=True`(폴더별 최초 동기화나 UIDVALIDITY 재동기화) 또는 Date 헤더가 저장 시각보다 72시간 넘게 이전인 메일**(과거 메일 폭주 방지).
+2. **LoopGuard 정적 조건**(§7.3의 1~11번)을 적용한다. 끌 수 없고 규칙보다 먼저 적용된다. 걸리면 blocked로 끝낸다.
+3. 규칙을 priority 오름차순으로 평가하고, 처음 맞는 규칙을 적용한다.
+4. 맞는 규칙이 없으면 **`unmatched_action`을 따른다. 기본값은 `ignore`이고, 설정에서 `draft`로 바꿀 수 있다**(C-01. 2026-10-04 사용자 재확정, §0.1).
+5. 결과가 `ignore`이면 ignored로 끝낸다.
+6. 결과가 `auto_send`이면 AuthGate(§7.6 A1~A6)와 LoopGuard 동적 조건(12~14)을 **예비 판정**한다. 불충족이면 계획을 draft로 강등하고 사유를 기록한다. 이 단계는 읽기 스냅샷 기준의 "빠른 길"이고 최종 판정이 아니다.
+7. **G3 잡 생성**(writer 안, §7.9): gate 술어, 잡 생성 상한(§7.7, DB 집계), 메일당 1잡을 확인한 뒤 잡을 넣는다(`enable_gen`, `rule_version` 기록). 상한을 넘으면 blocked(job_cap).
+8. 실행 시작(G4), 제출(G5), 사후 검증(G6), **결과 확정(G7, 권위 판정)**, 발송 직전(G8)은 §7.9를 따른다.
 
 ### 7.3 LoopGuard (하나라도 해당하면 차단, M10 전체 반영)
 | # | 조건 |
@@ -1184,6 +1310,14 @@ v0.1 형식을 유지하고 아래를 바꿨다.
 | 12 | 같은 스레드의 자동회신 횟수가 상한(기본 1)에 도달 |
 | 13 | 같은 **수신 예정 주소**에 대한 쿨다운(기본 24시간, 규칙별 `cooldown_hours`) 안에 있음 |
 | 14 | 회로차단 열림: 같은 수신 예정 주소로 10분 안에 3건 넘게 발송 시도(강등 포함). 열리면 autosend_state=`paused_circuit`, 경보 |
+
+- 1~11번은 메일만 보고 판정하는 **정적 조건**이다(`loop_guard.check_static`, 순수 함수). 12~14번은 DB 이력에 따라 달라지는 **동적 조건**이다(`loop_guard.check_dynamic(conn, …)`). 동적 조건은 동시성 2에서 두 잡이 같은 수신자나 스레드로 함께 통과하지 않도록 **G7의 writer 트랜잭션 안에서 반드시 다시 판정**한다(§7.9).
+
+- **동적 조건 집계 기준(H-A, 2026-10-05 보안리뷰 반영)** — 모두 G7 writer 트랜잭션 안에서 같은 conn으로 센다.
+  - **12(스레드 횟수)·13(쿨다운)**: `drafts.approved_by='policy_auto_send'`인 초안을 **`approved_at` 기준**으로, **status ∈ {outbox, sending, sent, failed, send_unknown} 전부** 센다. 12는 thread_key로 묶어 기간 제한 없이 세고, 13은 draft_recipients의 정규화 수신 주소로 묶어 cooldown_hours 창 안에서 센다. `sent`만 세면 G7에서 outbox로 커밋됐지만 아직 나가지 않은 건이 빠져, 동시성 2에서 같은 수신자에게 2건이 나간다.
+  - 보강: §5.3 초기화 전이 가운데 send_unknown→draft(실제로 발송됐을 수 있음)는 초기화하기 전에 auto_reply_log(outcome=`autosend_reset_unknown`, thread_key, recipient_norm, 원래 approved_at)를 남기고, 12·13은 이 로그도 더해서 센다. outbox/failed→draft 초기화는 발송되지 않은 것이 확실하므로 더하지 않는다.
+  - **14(회로차단)**: **auto_reply_log 기준**이다. 같은 recipient_norm으로 10분 안에 남은 G7 판정 기록을 센다(자동발송 커밋과 draft 강등을 모두 포함). 강등된 건은 drafts의 approved_by로 구분할 수 없기 때문이다.
+  - auto_reply_log에 recipient_norm·thread_key 컬럼이 없으면 m0003에 추가한다.
 
 자동 발송 메일에는 `Auto-Submitted: auto-replied`, `X-Auto-Response-Suppress: All`, `X-EmailToMCP-Auto: 1`, `In-Reply-To`, `References` 헤더를 붙인다(유지). 제목의 `Re:`는 정규화한다.
 
@@ -1236,6 +1370,7 @@ v0.1 형식을 유지하고 아래를 바꿨다.
    - 앱은 auto_send에 원문을 붙이지 않는다.
 4. **제목**: `Re: ` + 원문 제목을 정화(제어문자 제거, 120자 제한)해서 만든다. 원문 제목에 URL이나 이메일이 있으면 강등한다.
 5. 고지 문구(Q7 기본값 on): 본문 끝에 "이 메일은 자동으로 작성되었습니다."와 서명을 앱이 붙인다.
+6. **가드 입력과 실제 MIME의 차이(L-C)**: 출력가드는 제출 본문(과 정화한 제목)만 검사한다. 실제로 나가는 MIME과의 차이는 앱이 붙이는 블록뿐이며, 그 블록은 **코드 상수(고지 문구, `Re: ` 접두, 자동발송 헤더)이거나 G0에서 사람이 저장한 설정값(계정 서명)뿐**이다. 메일 내용이나 Claude 출력에서 유래한 값은 이 블록에 들어갈 수 없다. 서명은 저장할 때(G0) 출력가드를 한 번 통과해야 한다. 새 블록을 추가할 때도 이 조건을 지킨다(테스트: 가드 입력 + 상수/설정 블록 = 발송 MIME 본문).
 
 **수신자 결정(C2, C-15)**
 - 수신자는 **인증된 From의 addr-spec 하나**다. CC는 넣지 않는다.
@@ -1250,8 +1385,8 @@ v0.1 형식을 유지하고 아래를 바꿨다.
 
 | # | 조건 |
 |---|---|
-| A1 | 계정에 `trusted_authserv_id`가 설정되어 있다. 최근 수신 메일의 최상단 AR 헤더에서 자동 탐지하고 사용자가 확인한다 |
-| A2 | 메일의 **최상단** Authentication-Results(RFC 8601) 헤더가 신뢰 authserv-id의 것이다. 그 아래 헤더와 다른 authserv-id의 헤더는 무시한다 |
+| A1 | 계정에 `trusted_authserv_id`와 `trusted_boundary_by`(수신 경계 MTA의 Received `by` 호스트 패턴)가 **둘 다** 설정되어 있고, 계정의 `ar_capability`가 `confirmed`다. 설정은 G0에서 사용자만 한다. 자동 탐지는 아래 "자동 탐지 규칙"을 만족할 때 **후보만 제시**한다 |
+| A2 | **경계 위치 규칙**: 헤더를 위에서부터 훑어 처음 나오는, by 호스트가 `trusted_boundary_by`와 일치하는 Received를 **수신 경계**로 삼는다. 경계보다 **위쪽**의 Authentication-Results 중 authserv-id가 신뢰 값인 것(여러 개면 가장 위)만 인정한다. 경계 아래쪽(발신자가 메일에 담아 보낸 구간)의 AR은 authserv-id가 같아도 무시한다. 경계를 찾지 못하거나 경계 위에 신뢰 AR이 없으면 불충족 |
 | A3 | `dmarc=pass`이고 `header.from`이 From 도메인과 같다. 또는 규칙의 `accept_aligned_dkim=1`일 때 `dkim=pass`이고 `header.d`가 From 도메인과 정렬된다(조직 도메인 정렬) |
 | A4 | SPF만 통과한 경우는 인정하지 않는다. ARC를 거친 전달 메일(ARC-Seal 존재)은 제외한다 |
 | A5 | 규칙 조건에 **발신자 화이트리스트**(`from_address in_list` 또는 `from_domain in_list`)가 있다. 없는 auto_send 규칙은 **저장을 차단**한다. 무료 메일 도메인(gmail.com, naver.com, daum.net, kakao.com 등)을 from_domain으로 쓰면 경고한다 |
@@ -1259,20 +1394,33 @@ v0.1 형식을 유지하고 아래를 바꿨다.
 | A7 | autosend_state=enabled, queue_state=running, 앱 버전이 floor 이상이다 |
 | A8 | 잡 디렉터리 점검과 설정 격리 점검(§2(c))을 통과했다 |
 
+**신뢰 AR 위치와 자동 탐지 (H-B, 2026-10-05 보안리뷰 반영)**
+- **왜 위치인가**: 수신 서비스가 AR을 붙이지 않으면, 공격자가 메일에 직접 넣은 가짜 AR이 "최상단 AR"이 된다. 실제 authserv-id를 알아낸 공격자도 같은 값으로 위조할 수 있다. 진짜 경계 Received는 수신 서비스가 나중에 앞에 붙이므로 발신자가 넣은 어떤 헤더보다도 위에 있다. 그래서 "경계 위쪽" 조건은 전송 중에 끼워 넣을 수 없다. 이 성질은 해당 서비스가 경계 Received를 실제로 붙인다는 것이 실측으로 확인됐을 때만 성립하므로 아래 ③이 전제다.
+- **판정 오류는 언제나 강등 쪽이다**: 경계 패턴이 서비스 내부 hop과 겹쳐 AR이 경계 아래로 판정되면 draft로 강등될 뿐 발송되지 않는다. 조정은 실측 값으로 한다.
+- **③ ar_capability(실측 전에는 A1 자체를 끈다)**: `ar_capability`는 DB에 저장하지 않는다. 계정의 수신 서버 호스트로 코드 상수 `mail/ar_presets.py`(서비스별 authserv-id 기대값, 경계 by 패턴, capability. 근거는 `docs/research/02_R17_AR실측.md`, §12.3 P1)를 찾아 계산한다. 결과는 `confirmed / unsupported / unknown`이다. `confirmed`가 아니면(프리셋에 없는 서버 포함) **자동 탐지 버튼과 수동 입력이 모두 비활성이고 A1은 불충족**이다(auto_send는 언제나 draft로 강등). 프리셋에 없는 서버를 지원할지는 결정 대기로 남긴다.
+- **② 자동 탐지 규칙(후보 제시만, 자동 저장 없음)**: 최근 30일 INBOX(정크와 LoopGuard 10번 해당 메일 제외)에서 **서로 다른 발신 조직도메인(PSL 기준) N개(기본 5) 이상**의 메일이 모두 (a) 같은 by 패턴의 경계 Received를 갖고 (b) 경계 기준 **같은 상대 위치**(경계 위 k번째 AR)에 (c) **같은 authserv-id**의 AR을 가질 때만 후보로 제시한다. 같은 위치에 다른 id가 하나라도 나오거나, 프리셋 기대값과 다르면 후보를 내지 않고 충돌로 표시한다. 사용자는 근거 메일 목록(발신 도메인과 날짜만, PlainText)을 확인창에서 보고 확정한다(G0). 이 값을 저장하면 §7.9 설정 변경 드레인이 실행된다.
+- **① 경계 규칙**은 6단계(예비)·G7·G8 평가에 모두 적용한다. 그러려면 G1이 AR·Received의 헤더 순서와 Received by 호스트를 원자료로 저장해야 한다(§7.9 G1).
+
+- **AuthGate는 저장된 판정을 믿지 않는다.** `messages.auth_verdict`는 화면 표시용 캐시다. 판정은 `rules/auth_gate.evaluate_auth(auth_summary, trusted_authserv_id=<현재 계정 값>, trusted_boundary_by=<현재 계정 값>, ar_capability=<프리셋 계산값>, accept_aligned_dkim=<현재 규칙 값>, from_domain)`(순수 함수)로 하며, 6단계(예비), G7(권위), G8(발송 직전)에서 **그 시점의 계정·규칙 값으로 다시 계산**한다. trusted_authserv_id·trusted_boundary_by를 바꾸면 큐의 잡에는 G7에서, 이미 outbox에 있는 건에는 G8 재계산과 설정 변경 드레인(§7.9)으로 바로 반영된다.
+- A7에 "전역 토글 on이고 잡 세대가 현재 세대와 같다"를 더한다(§7.0).
+
 - 규칙의 `auth` 조건은 auto_send에 암묵적으로 AND로 붙는다.
 - 이 전제조건은 L8(주소 유효성 노출)도 완화한다. 인증되지 않은 발신자에게는 자동 발송하지 않기 때문이다.
 - AR 헤더를 붙이지 않는 서비스의 계정은 auto_send를 쓸 수 없다. 이 경우 UI에서 안내한다(R17).
 - **경고 (주 서비스 영향, 2026-10-04)**: 사용자가 확정한 주 서비스(네이버/다음/카카오/하이웍스)는 AR 헤더를 붙이지 않을 가능성이 지적된 서비스다(데카르트 N-04). 실제로 AR 미지원으로 확인되면 A1~A2를 통과할 수 없으므로, 해당 계정의 **즉시발송 기능은 초안 전용으로 축소될 수 있다.** 실측은 P1 완료기준(§12.3)에 넣었고, **P1 완료 시점에 결과를 사용자에게 다시 보고**한다. 대안(dkimpy와 DMARC DNS 조회를 이용한 로컬 검증, 미채택 사유는 추적표 G의 C2-1)을 검토할지는 그 보고 때 사용자와 정한다.
 
 ### 7.7 레이트리밋, 상한, 큐 상태 (M1, M4, C-03)
-레이트리밋은 **DB에서 계산한다**(drafts.status='sent' + sent_at + draft_recipients, jobs.created_at). 재시작해도 초기화되지 않는다.
+레이트리밋은 **DB에서 계산한다**. 재시작해도 초기화되지 않는다.
+- **auto_send 집계 기준(H-A, 2026-10-05 보안리뷰 반영)**: `drafts.approved_by='policy_auto_send'`인 초안을 **`approved_at`(G7 커밋 시각, Outbox 진입 시각) 기준**으로, **status ∈ {outbox, sending, sent, failed, send_unknown} 전부** 센다(수신자 주소·도메인은 draft_recipients로 묶는다). `status='sent'`·`sent_at` 기준은 쓰지 않는다. 커밋됐지만 아직 발송 전인 건이 빠지기 때문이다(아래 MCP send_draft 행과 같은 원칙). LoopGuard 12·13도 같은 기준을 쓰고, 14는 auto_reply_log 기준이다(§7.3). 검사는 G7 writer 트랜잭션 안에서 한다. G8에서는 다시 세지 않는다(그 건 자신이 이미 집계에 들어 있다).
+- 잡 생성 상한: `jobs.created_at` 기준, status 무관 전부.
 
 | 대상 | 기본 상한 | 초과 시 |
 |---|---|---|
 | auto_send — 수신자 주소별 | 24시간에 1건(쿨다운) | draft로 강등 |
 | auto_send — 수신자 도메인별 | 하루 5건 | 강등 |
 | auto_send — 전체 | 시간당 10건, 하루 50건 | 강등하고 autosend_state=`paused_ratelimit`, 알림 |
-| MCP send_draft — 전체 | 시간당 20건, 하루 100건 | 거부(PolicyError) |
+| MCP send_draft — 전체 | 시간당 20건, 하루 100건. **집계 기준(2026-10-05 구현 반영)**: `sent`만 세지 않고, 승인 주체가 MCP 경로(`ui` 승인 또는 `policy_allowlist`)인 초안 중 **승인 시각(`approved_at`, Outbox 진입 시각)이 창 안에 있는 모든 상태**(outbox/sending/sent/failed/send_unknown)를 센다 — Outbox 처리가 따라잡기 전에 연속 호출로 상한을 넘기지 못하게 하는, 설계보다 엄격한 기준이다. 사용자가 작성 창에서 직접 보낸 메일(`user_send`)은 세지 않는다. 검사는 요청 시점과 Outbox 전이 시점(writer 트랜잭션 안) 두 번 한다 | 거부(PolicyError) |
+| MCP 승인 요청(confirm) — 토큰별 | 동시 `pending_approval` 3건, 요청 분당 5건, 거부된 초안 재요청 60초 쿨다운(보안검토 M-1) | 거부(PolicyError), 초안은 draft 유지 |
 | 잡 생성 — 발신자 주소별 | 시간당 3건 | blocked(job_cap) |
 | 잡 생성 — 발신자 도메인별 | 시간당 10건 | blocked |
 | 잡 생성 — 전체 | 시간당 30건, 큐 길이 50 | blocked. 큐가 20건을 넘으면 UI 경고 |
@@ -1287,7 +1435,7 @@ v0.1 형식을 유지하고 아래를 바꿨다.
 - **긴급정지**를 누르면 다음이 함께 일어난다.
   - queue_state=stopped_emergency
   - 실행 중인 잡 cancelled(프로세스 트리 종료)
-  - origin=autoreply인 outbox 항목을 draft로 돌림
+  - `approved_by='policy_auto_send'`인 outbox 항목을 draft로 돌림(초기화 규칙, §5.3)
   - autosend_state=paused_emergency
 - 재개는 상태줄 버튼과 Claude 패널의 [재개]로 하며, 확인창을 거친다.
 
@@ -1307,6 +1455,101 @@ v0.1 형식을 유지하고 아래를 바꿨다.
 - **[Claude 초안 만들기]**: §3.3 참조.
 - 응답 시간 목표: 요약 p95 30초 이내(실측 기준은 P3 완료기준).
 - claude CLI를 쓸 수 없으면 버튼을 비활성화하고 툴팁으로 이유를 보여준다.
+
+### 7.9 자동발송 경로의 신뢰 경계와 재검증 시점 (2026-10-05 신설)
+
+**원칙**
+1. 자동발송에서 사람이 신뢰를 부여하는 시점은 **G0 하나뿐**이다: 규칙 저장(화이트리스트 A5 강제), trusted_authserv_id·trusted_boundary_by 확인(ar_capability=confirmed 계정만, §7.6), 전역 토글 켜기 확인. 이 세 가지는 UI에서만 바꿀 수 있다.
+2. G0 이후의 모든 단계는 "G0 때 사람이 승인한 조건이 **지금도** 성립하는가"를 확인할 뿐이다. 확인은 **상태를 바꾸는 writer 트랜잭션 안에서, writer가 방금 읽은 행으로** 한다(P2 H-2). 읽기 스냅샷 판정은 빠른 길을 고르는 용도로만 쓴다.
+3. 발송할 내용은 판정된 내용과 바이트 단위로 같아야 한다. 판정과 기록 사이에 다른 주체가 끼어들 수 있는 'draft' 상태 구간을 만들지 않는다(P2 N-1).
+
+| 관문 | 시점·주체 | 실행 위치 | 확인 내용 | 실패 시 |
+|---|---|---|---|---|
+| G0 | 사용자 | UI | 규칙 저장 검증(A5, RE2, 고정 템플릿 출력가드), authserv-id 확인, 토글 켜기 확인창 | 저장·켜기 거부 |
+| G1 | 수신 저장(SyncService) | writer | AR **원자료**와 헤더 순서(각 AR·Received의 위치 인덱스, Received의 by 호스트)를 `auth_summary`에 기록, `is_backfill` 표시(폴더 최초 동기화 메일 + 같은 계정에 같은 Message-ID 사본이 이미 평가됐거나 backfill이었던 재수신 사본 — 로컬만 휴지통으로 옮긴 메일의 재평가 방지, QA 33번 L-9). 판정은 하지 않음 | — |
+| G2 | 계획(RuleEngine) | 읽기 스냅샷(빠른 길) | §7.2의 0~6단계 | blocked·ignored·draft 강등 |
+| G3 | 잡 생성 | **writer 트랜잭션** | gate 술어(토글, 세대, 계정, 규칙 enabled, rule_version), 잡 생성 상한(DB 집계), 메일당 1잡 | 생성 안 함(blocked/NULL) |
+| G4 | 실행 시작(queued→running) | **writer 트랜잭션** | gate 술어, `enable_gen == generation`, queue_state=running. 토큰은 **커밋한 뒤에** 발급 | cancelled |
+| G5 | 제출(`submit_auto_reply`) | MCP L3 + **writer 조건부 UPDATE** | principal.kind=job, 대상은 principal.job_id로만 결정(인자에 메일 ID 없음), `UPDATE … SET submitted_at=?, submission_sha256=? WHERE id=? AND status='running' AND submitted_at IS NULL`의 rowcount가 1. 본문은 메모리(pending_verification)에만 둠 | 도구 오류(PolicyError) |
+| G6 | 사후 검증 | 프로세스 종료 후 | 종료 코드, 도구 ⊆ 허용 집합, submit 정확히 1회, turns 상한, 메모리 본문의 해시 = submission_sha256 | 폐기. 등급은 아래 "G6 실패 등급" 참고(허용 외 도구·submit 2회 이상 = failed(security)+paused_security, 그 밖 = failed(permanent)) |
+| G7 | **결과 확정(권위 판정)** | **writer 트랜잭션 1개**(`commit_autoreply_result`) | ① **잡 CAS**: 트랜잭션 안에서 잡이 `status='running' AND submitted_at IS NOT NULL`인지 확인한다. 마지막 잡 전이도 `UPDATE jobs … WHERE id=? AND status='running' AND submitted_at IS NOT NULL`의 rowcount=1을 요구한다(긴급정지·사용자 취소로 이미 cancelled된 잡이면 초안 없이 끝남). + gate 술어 + `enable_gen == generation` ② rule_version 동일 ③ 현재 계정·규칙 값으로 AuthGate 재계산(A1~A4, 경계 위치 규칙 포함), A6, A7(autosend_state·queue_state·floor) ④ A8: PreflightResult가 이 job_id·attempt에 묶여 있고, 시각이 유효하고, 모든 점검을 통과했으며, claude 실행 잡이면 `isolation_mode≠'fallback3'`(§7.11) ⑤ 수신자 = 메일의 인증된 From addr-spec을 **트랜잭션 안에서 다시 계산**, Reply-To 조건 ⑥ LoopGuard 12~14 + §7.7 레이트리밋(DB 집계, approved_at 기준 전 상태 — §7.3·§7.7) ⑦ **본문 동일성**: 트랜잭션 안에서 읽은 `jobs.submission_sha256` = sha256(INSERT할 본문) = `GuardResult.body_sha256` = `PreflightResult.verified_body_sha256`(claude 실행 잡). 출력가드는 트랜잭션 밖에서 순수 함수로 계산한다 | 통과: 초안 INSERT(origin=autoreply, job_id) + draft_recipients + message_id_hdr + `status='outbox'` + `approved_by='policy_auto_send'` + `outbox_expires_at` + 잡 done + 메일 상태 + 로그를 **한 번에 커밋**. 불통과(정책): 같은 트랜잭션에서 status='draft'로 INSERT하고 강등 사유 기록. gate·세대 불통과: 초안 없이 cancelled. 보안: 폐기. ④의 바인딩 불일치와 ⑦의 해시 불일치는 "보안: 폐기"(failed(security)). ④의 fallback3은 정책 강등(reason_code=`isolation_fallback`) |
+| G8 | 발송 직전(outbox→sending) | **writer 트랜잭션**(SendService의 단일 전이 함수) | **`approved_by='policy_auto_send'`이면**(origin과 무관): ① gate 술어(**job.rule_version을 함께 넘겨** 규칙 수정·삭제·비활성 반영) + job.enable_gen == generation ② **AuthGate 재계산**(messages.auth_summary + 현재 계정 trusted_authserv_id·trusted_boundary_by·ar_capability + 현재 규칙 accept_aligned_dkim) + A6 ③ autosend_state=enabled, queue_state=running ④ outbox_expires_at 미경과. approved_by가 다른 값(user_send, ui, policy_allowlist)이면 이 검사를 하지 않는다 | draft로 되돌리고(초기화 규칙) 로그 기록 |
+
+- **G6 실패 등급(P3 Phase B 구현, 보안검토 30번 L-1·34번 N-3·L-5 반영)**: 러너(`autoreply/job_runner.py`)가 stream-json을 파싱해 판정한다. 모두 초안 없이 폐기(outcome=discarded)다.
+  - **보안 등급** — failed(security) + autosend_state=`paused_security`: 허용 외 도구 시도(`security_tool`), submit 2회 이상(`security_submit_count`, 인젝션 전형 신호). 타임아웃으로 kill한 경우에도 잘린 stdout으로 이 판정을 **먼저** 한다.
+  - **일반 등급** — failed(permanent): 비정상 종료 코드·is_error·result 없음(`claude_exit`), turns 상한 초과(`turns_exceeded`), submit 0회·메모리 제출 없음(`submit_count`). 타임아웃(보안 신호 없을 때)은 failed(transient, `timeout`).
+  - **중지(abort)보다 보안 판정이 먼저(N-3)**: 사용자 중지·끄기·규칙 변경으로 잡이 중지돼도 프로세스 stdout으로 위 보안 판정을 먼저 하고, 보안 신호가 없을 때만 그냥 중지로 끝낸다. 잡이 이미 DB에서 cancelled(끄기 1단계·`revalidate_current`가 먼저 커밋)라 잡 상태를 바꿀 수 없으면 autosend_state=`paused_security`만 따로 건다 — 중지 시점과 허용 외 도구 시도가 겹쳐도 보안 신호가 사라지지 않는다.
+  - **G7 재확인(L-5, 2중 방어)**: 판정기(`rules/autosend_verify.py`)도 PreflightResult에 기록된 G6 사실(`tools_used ⊆ 허용 집합`, `submit_count == 1`, claude 실행 잡이면 `exit_code == 0`. 고정 템플릿 잡은 `tools_used`가 비어 있어야 함)과 트랜잭션에서 다시 읽은 G5 제출 기록(`status='running'`, `submitted_at`, `submission_sha256`)을 대조하고, 어긋나면 discard(보안). 허용 도구 집합은 러너와 판정기가 같은 상수(`core.autoreply_types.AUTOREPLY_DRAFT_ALLOWED_TOOLS`)를 쓴다.
+- 고정 템플릿 모드는 claude를 실행하지 않으므로 토큰 발급과 G6를 건너뛴다. 그러나 G4(queued→running) 전이는 똑같이 하고, 러너가 렌더한 직후 G5와 같은 조건부 UPDATE(`mark_submitted`)로 submitted_at·submission_sha256을 기록한다. 그래야 G7 ①·⑦을 그대로 만족한다. G3·G7·G8은 똑같이 거친다.
+- 강등된 draft를 사람이 [보내기]로 보내면 기존 `user_send` 경로(사람의 판단)를 따른다. `policy_auto_send`가 아니다.
+- **approved_by 초기화 규칙(M-B)**: `approved_by='policy_auto_send'`인 초안이 어떤 경로로든 draft로 돌아가면(끄기, 긴급정지, 설정 변경 드레인, G8 거부, 만료, [편집]) 같은 전이에서 `approved_by=NULL, approved_at=NULL, outbox_expires_at=NULL`로 만든다. 이 처리는 호출자가 선택하는 것이 아니라 `Repository.transition`이 to_state='draft'일 때 자동으로 한다. 이후 사람이 [보내기]하면 `user_send`가 된다. 자동 승인 이력은 append-only auto_reply_log에 남으므로 감사 기록은 사라지지 않는다. send_unknown→draft는 §7.3의 보강 로그를 먼저 남긴다.
+- **설정 변경 드레인(M-A, 2중 방어)**: 다음 값을 저장하는 writer 트랜잭션은 같은 트랜잭션 안에서 영향받는 `approved_by='policy_auto_send' AND status='outbox'` 초안을 draft로 되돌린다. 함수는 끄기 1c와 같은 `autoreply_repo.drain_autosend_outbox(conn, *, account_id, rule_id, reason)`이다. 대상: 계정의 trusted_authserv_id·trusted_boundary_by·auto_reply_enabled·수신/송신 보안·서명·enabled·수신 호스트·수신 프로토콜·송신 호스트·송신 사용자명(§7.6③ ar_capability가 수신 호스트로 프리셋을 찾으므로, 보안검토 34번 L-2) — 계정 값은 **같은 트랜잭션에서 UPDATE 직전 값과 비교해 실제로 바뀐 경우에만** 드레인한다(계정 창 전체 저장마다 대기 outbox가 초안으로 돌아가지 않게), 규칙 저장·삭제·비활성(해당 rule_id), auto_send 레이트리밋·쿨다운·금칙어·max_chars·고지문·서명(전 계정). 1차 방어는 G8 재계산(①·②), 2차 방어는 이 드레인이다. 레이트리밋 설정 변경은 G8에서 다시 세지 않으므로 이 드레인으로만 반영된다. sending은 회수할 수 없다(§7.0 R-f와 같음).
+- **설정 격리 폴백 3 상태(M-E)**: §2(c) 설정 격리 폴백 3(R10 수용)으로 동작 중이면, 사용자 hooks·플러그인이 잡 토큰과 env를 가진 채 실행될 수 있어 G6이 믿는 claude 자기보고 stream이 검증 근거가 되지 못한다. 이 상태에서는 **claude를 실행한 잡의 auto_send를 금지하고 draft만 허용**한다(G7 ④). 고정 템플릿 모드는 claude를 실행하지 않으므로 영향이 없다.
+- G7에서 예외가 나면 롤백하고 잡은 failed(transient면 재시도)로 둔다. **예외가 났는데 outbox로 가는 경로는 없다.**
+
+### 7.10 P2 보안검토 교훈 → P3 함정 대응표
+| P2 지적 | P3에서 같은 함정 | 설계 대응 |
+|---|---|---|
+| H-2 읽기 스냅샷으로 판정한 뒤 전이(TOCTOU) | G2 계획 판정만 믿고 발송 | 권위 판정은 G7·G8의 writer 안에서만(§7.9) |
+| H-1 다른 주체의 초안 변조 / N-1 저장→발송 비원자 | auto_send 결과가 'draft' 상태로 잠깐 존재하는 동안 UI 자동저장이나 MCP가 수정 | G7에서 INSERT와 outbox 진입을 한 트랜잭션으로 처리. origin=autoreply는 `require_mcp_owned`에 걸려 MCP가 바꿀 수 없음. outbox 상태는 UI에서 편집할 수 없음(§5.3). Outbox 가상폴더의 [편집]은 outbox→draft 전이(CAS, approved_by 초기화)를 거쳐야만 할 수 있다(§5.3) |
+| I-1 `None`이면 검사 생략(fail-open API) | `verify=None`이나 세대 미전달로 정책 발송 | 자동발송 repo 함수는 호출 인자로 판정 함수를 받지 않는다. 권위 판정은 core.ports.AutoSendVerifier의 유일한 구현(rules/autosend_verify.py)을 app.py가 생성자에 1회 주입하고, 구현이 하나뿐임을 아키텍처 테스트로 강제한다(§7.11). expected_generation·rule_version은 필수 키워드 인자이고 기본값이 없다. 'policy_auto_send' 문자열은 storage/repositories/autoreply.py 한 곳에서만 쓴다(아키텍처 테스트로 강제) |
+| N-4 token_id가 None인 주체 통과 | 잡 주체가 대화형 도구를 호출하거나, 대화형 토큰이 J 도구를 호출 | L3에서 `principal.kind`를 먼저 확인한다: job은 J 도구만, interactive는 J 도구를 못 씀. J 도구는 인자로 대상을 받지 않음 |
+| 리뷰 11번 6항 | 잡 토큰과 대화형 토큰이 섞임 | 잡 토큰은 메모리 전용 별도 저장소(mcp_tokens와 분리). running일 때만 유효. 전이(취소, 완료, 토글 off)와 동시에 폐기 |
+| M-1 상한을 메모리로 집계 | 잡 상한·레이트리밋을 재시작이나 경합으로 우회 | 모든 상한을 DB로 집계하고 G3·G7의 writer 안에서 판정한다. **집계 기준**: auto_send 상한과 LoopGuard 12·13은 approved_by='policy_auto_send' 초안을 approved_at 기준으로 outbox/sending/sent/failed/send_unknown 전부 센다(send_unknown 초기화 로그 포함). 14는 auto_reply_log 기준, 잡 생성 상한은 jobs.created_at 기준 전부다(§7.3, §7.7). 'sent'만 세는 방식은 금지한다 |
+| H-3·N-2·N-5 비신뢰 문자열을 리치텍스트로 렌더링 | 자동회신 로그, 드라이런 표, 잡 큐, 강등 사유 툴팁에 메일 제목·주소 | 모든 표시는 PlainText, 툴팁은 escape. `ui/message_box.py` 헬퍼를 재사용 |
+| L1·L2 같은 함수 원칙 | gate 판정이 여러 곳에 복제되어 어긋남 | `check_autoreply_gate` 단일 함수를 G3·G4·G7·G8이 공유 |
+| S-1 주석과 실제 순서가 다름 | 끄기 순서(DB 커밋 → 토큰 폐기 → kill) | 순서를 단언하는 테스트로 고정 |
+| (P3 신규) 숨은 신뢰 지점 | AR 자동탐지 오염(H-B), G6 자기보고(M-E) | 경계 위치 규칙·N도메인 일치·실측 전 비활성(§7.6), 폴백 3이면 auto_send 금지(§7.9) |
+
+### 7.11 구현 인터페이스 (Edison 인계용)
+- `rules/gate.py`: `check_autoreply_gate(conn, *, account_id: int, rule_id: int | None, rule_version: int | None, job_generation: int | None) -> GateResult(ok: bool, reason_code: str | None)` — 순수 함수, 받은 conn만 읽음. reason_code는 `disabled`, `generation_mismatch`, `account_disabled`, `rule_disabled`, `rule_changed`, `rule_missing`.
+- `rules/auth_gate.py`: `evaluate_auth(auth_summary: Mapping, *, trusted_authserv_id: str | None, trusted_boundary_by: str | None, ar_capability: Literal['confirmed','unsupported','unknown'], accept_aligned_dkim: bool, from_domain: str) -> AuthVerdict` — 순수 함수. 추가: `detect_authserv_candidate(samples, *, preset, min_distinct_domains: int = 5) -> AuthservCandidate | Conflict | None`(순수 함수, 저장하지 않음), `mail/ar_presets.py: capability_for(imap_host) -> ArPreset`.
+- `rules/loop_guard.py`: `check_static(msg, my_addresses) -> list[str]`(1~11), `check_dynamic(conn, *, account_id, thread_key, recipient_norm, rule) -> str | None`(12~14).
+- `rules/rate_limit.py`(확장): `autosend_limits(conn, *, recipient_norm, domain, now) -> str | None`, `job_creation_limits(conn, *, sender_norm, domain, now) -> str | None` — writer 안에서 호출. 집계 기준은 §7.7(approved_at 기준 전 상태).
+- `storage/repositories/autoreply.py`
+  - `disable_and_drain(db, *, now) -> DrainReport`
+  - `enable(db, *, expected_generation: int, now) -> int`(새 세대)
+  - `recover_on_startup(db, *, enabled: bool) -> RecoveryReport`
+  - `create_autoreply_job(db, *, message_id, rule_id, rule_version, planned_action, downgrade_reason, sender_addr_norm, sender_domain, expected_generation: int) -> int | None`
+  - `claim_next_job(db, *, now) -> JobRow | None`(G4 포함)
+  - `mark_submitted(db, *, job_id, body_sha256) -> bool`
+  - `drain_autosend_outbox(conn, *, account_id: int | None, rule_id: int | None, reason: str) -> int` — 끄기·긴급정지·설정 저장 트랜잭션에서 같은 conn으로 호출
+  - `commit_autoreply_result(db, *, job_id, proposed: ProposedReply, guard: GuardResult, preflight: PreflightResult) -> CommitOutcome` — **verify 인자 없음**
+  - `AutoReplyRepository(db, *, verifier: AutoSendVerifier)` — 생성자에서 verifier가 None이거나 호출할 수 없으면 즉시 예외
+  - 모든 인자는 키워드 전용이며 기본값이 없다.
+- SendService: outbox→sending 전이 함수에 origin=autoreply 분기의 G8 검사를 넣는다(같은 writer 작업 안).
+- **권위 판정 고정(M-D)**: 판정은 `core.ports.AutoSendVerifier`의 **유일한 프로덕션 구현** `rules/autosend_verify.py: verify_autosend(conn, job, *, guard, preflight) -> AutoSendVerdict`가 한다. 이 함수 안에서 check_autoreply_gate·evaluate_auth·loop_guard.check_dynamic·rate_limit.autosend_limits·본문 해시 대조를 고정 순서로 호출한다. repo 함수 안에서 직접 호출하지 않는 이유는 §4.2(storage는 rules를 import할 수 없음) 때문이다. 대신 다음으로 강제한다.
+  - 아키텍처 테스트: tests/ 밖에서 AutoSendVerifier를 구현하거나 verifier= 로 넘기는 코드는 rules/autosend_verify.py와 app.py뿐이다. `AutoReplyRepository(` 생성은 app.py에만 있다.
+  - `AutoSendVerdict`는 frozen이고 rules/autosend_verify.py 안에서만 생성한다(다른 곳의 생성자 호출 금지, 아키텍처 테스트). repo는 verdict.job_id·generation·rule_version이 트랜잭션에서 읽은 값과 다르면 거부한다.
+  - verifier에서 예외가 나거나 반환 타입이 다르면 롤백하고 failed로 둔다(outbox 경로 없음).
+- `GuardResult`(frozen, `rules/output_guard.check()`만 생성): `ok: bool, findings: tuple[str, ...], body_sha256: str, subject_sha256: str`. G7 ⑦에서 jobs.submission_sha256과 대조한다.
+- `PreflightResult`(frozen, `autoreply/preflight.py`만 생성, 잡 ID와 시각에 바인딩) — A8 구체화:
+  - 바인딩: `job_id, attempt, pre_checked_at, post_checked_at`. G7은 job_id·attempt가 일치하는지, `jobs.started_at ≤ pre_checked_at ≤ post_checked_at ≤ now`인지 확인하고, 하나라도 어긋나면 보안 실패로 본다.
+  - 실행 전 점검(G4 커밋 후, 프로세스 시작 직전): `jobdir_fresh`(새로 만든 빈 디렉터리), `jobdir_acl: 'owner_only'|'failed'`(Windows는 상속 차단 + 현재 사용자 SID만 있는 DACL, POSIX는 0700), `ancestor_clean`(상위 경로에 CLAUDE.md·.claude 없음, R1-9), `isolation_mode: 'setting_sources'|'config_dir'|'user_settings_clean'|'fallback3'`, `user_settings_sha256`
+    - (P3 Phase B 보안검토 30번 반영) 점검 대상 user 설정 경로는 자식 env와 **같은 Mapping**에서 계산한다(자식 홈 + `.claude`). 원본 환경에 `CLAUDE_CONFIG_DIR`이 있으면 미지원 구성으로 `fallback3`(자식에게도 넘기지 않음, H-1). 자식에게 넘길 홈 키(Windows=USERPROFILE, 그 밖=HOME)가 원본 환경에 없어도 점검 경로(`Path.home()`)와 자식의 실제 홈이 어긋날 수 있어 `fallback3`(`unsupported_env:home_missing`, 34번 N-1). `JobRunner`의 `claude_config_dir` 인자는 테스트 전용이며 app.py가 넘기지 않음을 아키텍처 테스트로 강제한다(34번 Info-3). user/managed settings 검사는 **allowlist**(무해 최상위 키만 허용, 비어 있지 않은 `env` 블록·`managed-mcp.json` 존재도 `fallback3`, M-1). 해시 대상은 user settings 2종 + `~/.claude/CLAUDE.md` + managed settings(Windows `C:\Program Files\ClaudeCode\`, 구버전 `C:\ProgramData\ClaudeCode\`).
+  - 실행 후 점검(프로세스 종료 직후, G7 전): 잡 디렉터리에 예상 밖 파일(.claude/, settings*, CLAUDE.md)이 생겼는지, `user_settings_sha256`이 실행 전과 같은지(TOCTOU 완화), G6 결과(`tools_used, submit_count, turns, exit_code`), `verified_body_sha256`(메모리 본문 해시 = submission_sha256일 때만 채움)
+  - fail-closed: DACL 설정 실패나 실행 후 점검 실패면 결과를 draft로 강등한다. 잡 디렉터리 삭제 실패면 autosend_state=`paused_security`로 바꾸고 경보를 낸다.
+    - (P3 Phase B 구현, 보안검토 30번 M-2) Phase B는 fallback3과 정책을 맞춰 더 보수적으로 G7 ④에서 강제한다: `user_settings_unchanged=False` 또는 `unexpected_files` 있음 → **discard(보안, paused_security)**, `ancestor_clean=False` 또는 `jobdir_acl='failed'` → **cancel**(초안 없음).
+- `autoreply/controller.py`: `AutoReplyController.start_if_enabled()`, `disable() -> ToggleResult`(**CAS 없음, 항상 성공** — 끄기는 안전한 방향)와 `enable(*, expected_generation: int) -> ToggleResult`(CAS)로 나눈다. 내부 asyncio.Lock 직렬화는 그대로 둔다. UiApi: `set_autoreply_enabled(enabled, expected_generation)` → `disable_autoreply()`, `enable_autoreply(expected_generation)`. §7.0 본문의 `set_enabled` 표기도 `disable/enable`로 함께 고친다. `UiApi`: `get_autoreply_toggle() -> {enabled, generation, changed_at, preflight}`. `set_setting`은 보호 키를 거부한다.
+- **주체 판정(L-D)**: L3의 `principal.kind`는 닫힌 enum `{job, interactive}`다. 그 밖의 값이나 None은 거부한다(default 분기 = 거부). 토큰 조회는 잡 토큰 저장소(메모리)와 mcp_tokens 중 **토큰 접두/형식으로 정해지는 한 곳만** 보며, 한쪽에서 실패했을 때 다른 쪽을 다시 찾는 폴백 조회는 없다.
+- `mcp_server/scopes.py`: `SCOPE_JOB` 추가. L3 handler에서 principal.kind를 먼저 분기한다.
+- 마이그레이션 m0003_autoreply_toggle.py(§5.1): autoreply.generation 초기값 1, accounts.trusted_boundary_by 추가, auto_reply_log.recipient_norm·thread_key(없으면) 추가.
+- 아키텍처 테스트 추가
+  - `'policy_auto_send'` 리터럴은 허용된 파일에만 있어야 한다.
+  - `autoreply.enabled`를 쓰는 SQL은 `repositories/autoreply.py`에만 있어야 한다.
+  - mcp_server는 autoreply를 import하지 않는다(기존 규칙 유지).
+  - `AutoSendVerifier` 구현과 verifier 주입 위치 제한.
+  - `GuardResult`·`PreflightResult`·`AutoSendVerdict` 생성 위치 제한.
+  - outbox→sending 전이가 SendService의 단일 함수 하나뿐.
+  - `commit_autoreply_result`에 verify 파라미터 없음.
+
+**구현 시 확인사항(보안리뷰 23번, Spinoza 요청)** — 데카르트·Spinoza가 구현 검증 때 대조한다
+1. G8이 SendService의 **모든** outbox→sending 경로(첫 발송, sending→outbox 재시도 백오프 뒤의 재진입, 기동 복구 뒤 첫 발송)에 적용되는가. sending으로 들어가는 전이 함수가 하나뿐임을 테스트로 고정한다.
+2. G5 뒤 메모리에 둔 본문의 해시를 G7에서 **트랜잭션 안에서 읽은 jobs.submission_sha256**과 대조하는가(호출자가 넘긴 해시끼리만 비교하지 않는다).
+3. 기동 시 enabled=true 복구에서 requeue한 잡의 enable_gen을 원래 값으로 유지하는가(현재 세대로 덮어쓰지 않는다. 세대가 다르면 G4에서 cancelled).
+4. Windows DACL 설정 실패와 잡 디렉터리 삭제 실패 때 fail-closed(draft 강등, paused_security)로 동작하는가.
+5. (보강) G7 ①의 잡 CAS(`status='running' AND submitted_at IS NOT NULL`)가 cancelled 잡을 done으로 덮어쓰지 않는가.
+6. (보강) draft로 가는 모든 전이에서 policy_auto_send 행의 approved_by·approved_at이 초기화되는가(I8).
 
 ---
 
@@ -1444,6 +1687,7 @@ v0.1 형식을 유지하고 아래를 바꿨다.
 | 비밀 저장 | keyring | collect_submodules 훅 |
 | 경로 | platformdirs | |
 | HTML | nh3, html2text | |
+| 인앱 매뉴얼 렌더링 | markdown(Python-Markdown) | §11.9. 신뢰 콘텐츠이므로 nh3 정화는 거치지 않음 |
 | 문자셋 | charset-normalizer | |
 | 프로세스 | psutil | |
 | 검증 | pydantic v2 | |
@@ -1491,7 +1735,7 @@ v0.1 형식을 유지하고 아래를 바꿨다.
 ├ (업데이트 배너: 새 버전 1.0.1 [릴리스 노트][다운로드 페이지 열기][나중에]) ──────────────────┤
 ├───────────────┬──────────────────────────────────────────────────────────────┤
 │ 폴더 트리       │ 메일 그리드(QTableView, 정렬·열 설정)                              │
-│ ▾ 계정A         │ 안읽음|플래그|첨부|우선순위|보낸사람|제목|받은시간|크기|자동회신        │
+│ ▾ 계정A ●정상    │ 안읽음|플래그|첨부|우선순위|보낸사람|제목|받은시간|크기|자동회신        │
 │   받은편지함(3)  ├──────────────────────────────────────────────────────────────┤
 │   보낸편지함     │ 미리보기: 헤더 / [요약][Claude 초안 만들기][원문 보기]                  │
 │   임시보관함     │ (요약 패널: 요약 500자 / 제안 답 [이 답으로 초안 만들기])               │
@@ -1500,12 +1744,18 @@ v0.1 형식을 유지하고 아래를 바꿨다.
 │   보낼편지함(1)  │                                                                │
 │   승인 대기(1)   │                                                                │
 ├───────────────┴──────────────────────────────────────────────────────────────┤
-│ 상태줄: 마지막 수신 10:32 | MCP ● :8765 | claude ● v2.x (구독) | 잡 대기 1 | 자동발송 ● 활성 │
+│ 상태줄: 메일 ●정상(2계정) | 마지막 수신 10:32 | MCP ●서버:8765 | Claude ●연결됨(2분 전) | 잡 대기 1 | 자동발송 ● 활성 │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 - "작업" 아래의 보낼편지함(Outbox: outbox·failed·send_unknown)과 승인 대기(pending_approval)는 drafts 상태로 만든 **가상 폴더**다(C-19, C-04). 각각 [재시도] [편집] [삭제], [승인 창 열기] [취소] 버튼을 둔다.
 - 필터: 안읽음, 플래그, 첨부 있음, 기간.
 - 새 메일이 오면 OS 알림을 띄운다(P1).
+- **메일 서버 연결상태 아이콘**(2026-10-04 사용자 지시, MCP/Claude 연결 아이콘과 별개)
+  - 폴더 트리의 계정 행마다 점으로 표시한다: `●정상`(success, 직전 수신·발송 성공) / `●연결중`(primary-muted, 폴링 진행 중) / `●오류`(destructive, 직전 수신 또는 발송 실패 — 툴팁에 마지막 오류 메시지와 시각).
+  - 상태줄에는 **전체 계정의 집계**를 보여준다: 모든 계정이 정상이면 `메일 ●정상(N계정)`, 하나 이상 오류면 `메일 ●오류(1/N계정)`(destructive, 클릭하면 실패한 계정으로 포커스 이동).
+  - 근거 이벤트: `core.events`에 `AccountConnected`(신규, 폴링·발송 성공 시 발행)와 기존 `AccountError`(실패 시 발행, §2(b) S-15 "계정 단위 격리"의 UI 반영) 둘을 쌍으로 쓴다. 계정별 마지막 상태는 `accounts` 레코드에 영속하지 않고 런타임 상태(backend 메모리)로만 유지한다 — 재시작하면 "연결중"으로 초기화된다.
+  - Outbox(발송 대기/실패)와는 별개 지표다. 발송 실패는 "보낼편지함"의 failed 건수로 이미 보이므로 중복 표시하지 않는다.
+- **자동회신 토글 연동**(§7.0): off이면 상태줄 끝이 `자동회신 ○꺼짐`(muted)으로 바뀌고, 클릭하면 설정 > 자동회신 탭이 열린다. on이면 기존 `자동발송 ● …` 표시를 쓴다. off인 동안 [긴급정지] 버튼은 비활성화하고 툴팁으로 "자동회신이 꺼져 있습니다"를 보여 준다. 표시는 `AutoReplyEnabledChanged` 이벤트로 갱신한다.
 
 ### 11.2 작성 창
 - 받는사람/참조/숨은참조 입력란이 있고, 주소를 검증하며 송수신 이력 기반 자동완성을 지원한다.
@@ -1533,8 +1783,10 @@ v0.1 형식을 유지하고 아래를 바꿨다.
 - 자동회신 탭
   - `trusted_authserv_id`: 자동 탐지값을 보여주고 사용자가 확인한다.
   - 자기 별칭 목록, auto_reply_enabled.
+  - 전역 토글이 off이면 auto_reply_enabled 옆에 "전역 자동회신이 꺼져 있어 지금은 적용되지 않습니다(설정 > 자동회신)" 안내를 표시한다. 체크박스는 계속 편집할 수 있다.
 
 ### 11.4 규칙 설정
+- 전역 토글이 off이면 상단 배너: "자동회신이 꺼져 있습니다. 규칙은 저장되지만 적용되지 않습니다. [설정에서 켜기]". 규칙 편집과 드라이런은 그대로 할 수 있다. 드라이런 결과표 위에도 같은 안내를 표시한다. 드라이런 표의 제목·주소 셀은 PlainText다.
 - 드래그로 우선순위를 바꾸고, 조건 편집기를 쓴다. regex는 RE2 문법임을 안내한다.
 - **auto_send 규칙 저장 검증(C2)**
   - 발신자 화이트리스트가 없으면 저장을 차단한다.
@@ -1546,7 +1798,7 @@ v0.1 형식을 유지하고 아래를 바꿨다.
 
 ### 11.5 Claude/MCP 패널
 - **MCP**
-  - 서버 상태와 포트. 포트 충돌 시 경고와 변경 버튼.
+  - 서버 상태와 포트. 포트 충돌 시 경고와 **"도구 > 설정 > MCP 탭에서 포트를 바꾼 뒤 앱을 다시 시작하세요" 안내 문구**를 보여 준다(2026-10-05 구현 반영 — 패널 안에 별도 [변경] 버튼은 두지 않고 포트 설정은 설정 창 한 곳에서만 한다). 메인 창 상태줄도 "MCP ●꺼짐(포트 N 사용 불가)"과 같은 안내 툴팁을 띄운다.
   - 연결 방식 안내: stdio 프록시 등록 스니펫(기본), HTTP 직결(고급).
   - 토큰 목록: 라벨, 스코프, 마지막 사용, [폐기], [발급].
   - 토큰은 기본 마스킹한다. 복사할 때는 클립보드 기록 제외 형식(Windows `ExcludeClipboardContentFromMonitorProcessing`)을 쓰고 60초 뒤 자동으로 지운다(L6).
@@ -1558,6 +1810,7 @@ v0.1 형식을 유지하고 아래를 바꿨다.
   - queue_state와 autosend_state, [재개]/[일시정지].
   - 잡 큐, 자동회신 로그, MCP 감사로그.
   - 대화형 세션 경고 문구(§8.2).
+  - 전역 토글이 off이면 [재개]/[일시정지]를 비활성화하고 "자동회신이 꺼져 있습니다" 안내를 표시한다. 수동 요약과 초안 잡은 D-12 결정에 따른다(잠정: 그대로 표시·실행).
 
 ### 11.6 발송 승인 다이얼로그 (H9, M5)
 - 수신자 전체(To/CC/BCC), 제목, 본문, 첨부를 모두 보여준다. 외부 도메인 수신자는 `favorite` 색 배지로 강조한다.
@@ -1565,11 +1818,27 @@ v0.1 형식을 유지하고 아래를 바꿨다.
 - **기본 버튼은 [거부]**다. 창이 뜬 뒤 **1.5초 동안은 입력을 받지 않고**, 그 뒤에 [승인]을 활성화한다(primary-gradient).
 - 버튼은 [승인] [수정 후 발송] [거부]다. [수정 후 발송]은 작성 창에서 사용자가 직접 보낸다(새 스냅샷).
 - 120초 카운트다운이 끝나면 승인 대기함에 남는다.
+- **비신뢰 문자열은 평문으로만 렌더링한다(보안검토 H-3, 2026-10-05).** 제목(회신이면 공격자 메일 제목 그대로)·수신자 주소·계정 표시명을 보여 주는 QLabel은 전부 `Qt.TextFormat.PlainText`로 고정한다. QLabel 기본값(AutoText)은 `<img src="file://공격자/share/a.png">`를 리치텍스트로 해석하므로, 클릭 없이 자동으로 뜨는 이 창에서 UNC 로드(NetNTLM 해시 유출)나 승인 화면 위장이 가능해지기 때문이다. 본문은 원래대로 `QPlainTextEdit`(평문)이다. 같은 이유로 메인 창 미리보기(제목·보낸사람·받는사람)와 상태줄, 계정 설정의 연결 테스트 결과(서버 응답 문구) QLabel도 PlainText로 고정했다.
 
 ### 11.7 설정
 - 수신 주기, 미리보기 위치, 원격 이미지(P4)
 - MCP 발송 모드(기본 confirm), 포트
-- 자동회신 타임아웃, 동시성, 재시도
+- **자동회신 탭**(2026-10-05, §7.0)
+  ┌ 자동회신 ─────────────────────────────────────────────┐
+  │ [ ] 자동회신 사용                                           │
+  │     상태: ○ 꺼짐 — 규칙 3개 보존됨 (마지막 변경 10-05 14:02)       │
+  │     켜면 "켠 이후에 받은 메일"에만 규칙이 적용됩니다.             │
+  │     꺼도 규칙과 계정별 설정은 지워지지 않습니다.                 │
+  │ ───────────────────────────────────────────────── │
+  │ 자동회신 타임아웃 [120]초   동시성 [1]   재시도 [2]              │
+  │ [규칙 설정 열기]                                           │
+  └─────────────────────────────────────────────────────┘
+  - 탭 맨 위에 둔다. 위젯은 기존 업데이트 탭과 같은 QCheckBox다(별도 스위치 위젯을 만들지 않는다). 상태 라벨은 PlainText.
+  - 다른 설정과 마찬가지로 [저장]을 눌러야 적용된다. 탭 아래쪽 설정은 꺼져 있어도 편집할 수 있다.
+  - **off → on 저장 시 확인창**: 기본 버튼 [취소], [켜기]는 창이 뜬 뒤 1.5초 동안 비활성(§11.6과 같은 방식). 사전점검 목록(§7.0 켜기 1단계)을 평문으로 보여 준다. 확인하면 `set_autoreply_enabled(True, expected_generation)`을 호출한다. CAS가 실패하면 평문 경고를 띄우고 다시 읽는다.
+  - **on → off 저장**: 확인창 없이 바로 적용한다(안전한 방향). 결과를 평문 정보창으로 보여 준다: "실행 중이던 잡 n건 취소, 발송 대기 n건을 초안으로 되돌림, 이미 전송 중이던 n건은 취소할 수 없음".
+  - 범용 설정 저장 루프(`set_setting`)에 `autoreply.enabled`를 넣지 않는다(보호 키). 전용 API만 쓴다.
+  - 메뉴에 "도구 > 자동회신 사용" 같은 두 번째 진입점은 두지 않는다. 진입점은 한 곳만 둔다. 급하게 멈출 때는 긴급정지를 쓴다.
 - 테마(시스템/라이트/다크)
 - **업데이트**: 자동 확인 on/off(기본 on, dev 빌드는 off), 채널(stable만 제공), [지금 확인], 현재 버전과 마지막 확인 결과
 - 데이터 보존(§5.6)
@@ -1582,9 +1851,30 @@ v0.1 형식을 유지하고 아래를 바꿨다.
 | 최신 | 설정 화면에만 "최신 버전입니다" |
 | 새 버전 있음 | 비모달 배너 + 상태줄 배지 |
 | 보안 업데이트(`security=true`) | 강조 배너(닫으면 24시간 뒤 다시 표시) |
-| floor 미달 | **고정 빨간 배너**: "필수 업데이트: 자동발송과 MCP 발송이 정지되었습니다" |
-| 확인 불가(네트워크, 만료) | 설정 화면에 사유 표시. 7일 넘게 확인하지 못하면 배너 |
-| 보안 경보(서명 실패, 해시 충돌) | 경보 다이얼로그 1회 + 업데이트 기능 정지 |
+| floor 미달 | **고정 빨간 배너**: "필수 업데이트: 현재 버전(X)은 최소 지원 버전(Y)보다 낮습니다. 최신 버전(Z)으로 업데이트하세요" (2026-10-05 보정: 구현 문구로 갱신. P1에는 자동발송·MCP 발송이 없어 "정지" 문구는 사실과 달라 뺐다. 정지 연동 문구는 P2/P3에서 추가) |
+| 확인 불가(네트워크, 만료, 서명 파일 형식 오류, 미내장 서명키, 서명 검증 키 미내장 빌드) | 설정 화면에 사유 표시. 7일 넘게 확인하지 못하면 배너. 미내장 서명키는 "이 버전이 오래되어 새 서명키를 모릅니다 — 수동 업데이트가 필요합니다"로 구분 표시(2026-10-05 보정) |
+| 보안 경보(내장 키의 서명 검증 실패, 해시 충돌) | 경보 다이얼로그 1회 + 업데이트 자동 확인 정지. 2026-10-05 보정: 이 두 경우로만 좁혔다(§14.4) |
+
+### 11.9 사용 설명서(인앱 도움말) (신규, 2026-10-04 사용자 지시)
+- **메뉴 "도움말 > 사용 설명서"**(단축키 F1)로 연다. 현재 보고 있는 화면에 맞는 섹션으로 바로 이동한다(각 화면의 `[?]` 아이콘도 같은 동작).
+- **구현**: `docs/manual/*.md`(한국어)를 원본으로 두고, PyInstaller 빌드 시 앱 리소스로 함께 포함한다(`ui/resources/manual/`와 동일한 방식으로 datas 등록, §9.2). 실행 중에는 Markdown → HTML 변환(`markdown` 또는 `mistune` 라이브러리, §10에 추가) 후 `QTextBrowser`로 렌더링한다. 내용은 앱이 직접 작성한 신뢰 콘텐츠이므로 §8.4의 `loadResource` 제한(비신뢰 메일 본문용)은 적용하지 않고, 이미지·앵커 링크를 그대로 허용한다.
+- **문서 구조**: 화면 구성(§11.1~§11.8)과 1:1로 대응한다.
+
+| 파일 | 대응 화면 |
+|---|---|
+| `00_인덱스.md` | 전체 목차, 처음 실행 안내 |
+| `01_메인창.md` | §11.1(폴더 트리, 그리드, 미리보기, 상태표시 아이콘) |
+| `02_작성창.md` | §11.2(새 메일/회신/전달, 첨부) |
+| `03_계정설정.md` | §11.3(계정 추가, 프로토콜/프리셋, 2FA·앱비밀번호 안내) |
+| `04_규칙설정.md` | §11.4(자동회신 규칙, 드라이런) **+ §7.0 전역 토글 "자동회신 켜기/끄기" 절(기본 꺼짐, 켤 때 확인창, 끄면 진행 중 잡 취소·대기 발송 초안 복귀, 규칙 보존, 켠 이후 메일에만 적용)** — P3 구현 시점에 작성 |
+| `05_Claude_MCP패널.md` | §11.5(연결 방식, 토큰, 잡 큐) — P2 구현 시점에 맞춰 작성 |
+| `06_발송승인.md` | §11.6 |
+| `07_설정.md` | §11.7, §11.8(테마, 업데이트) |
+
+- **유지보수 원칙(필수, 모든 이후 작업에 적용)**: UI 화면이나 동작을 추가·변경하는 모든 구현 작업은 **대응하는 `docs/manual/*.md`를 같은 작업 범위에서 함께 수정**한다. 새 화면을 만들면 새 매뉴얼 문서를 만들고 위 표와 이 섹션에 줄을 추가한다. 이 원칙은 `D:\claude_emailtomcp\CLAUDE.md`에도 동일하게 명시해 에이전트가 매번 설계서를 뒤지지 않고도 따르게 한다.
+- (2026-10-05) P3에서 함께 고칠 매뉴얼: `04_규칙설정.md`(신규, 토글 절 필수), `07_설정.md`(자동회신 탭 설명 — 지금 있는 "실제 동작은 P3에서 제공됩니다" 문구를 교체), `01_메인창.md`(상태줄 `자동회신 ○꺼짐`, 긴급정지 비활성 조건).
+- **Phase 완료기준 연동**: §12.3의 각 Phase 완료기준에 "해당 Phase에서 변경·추가된 화면의 매뉴얼 문서가 최신 상태인지 확인"을 포함한다(데카르트 QA 체크리스트 항목으로도 추가 권고).
+- P1 범위: 00/01/02/03/07 문서를 1차로 작성한다. 04/05는 각각 P3/P2 구현 시점에 작성한다.
 
 ---
 
@@ -1601,7 +1891,7 @@ v0.1 형식을 유지하고 아래를 바꿨다.
 | P0 골격 | 빌드·버전(hatch-vcs, `v1.0.0.dev0`), core(errors/events/states/ports/clock), storage(writer, transition, 마이그레이션, rebuild 헬퍼), 단일 인스턴스, 종료 순서, 로깅, settings, `--version` 조기 종료, 아키텍처 테스트, CI 골격 |
 | P1 MVP 메일 클라이언트 + 업데이트 알림 | §1.2의 P1 항목 전부(**IMAP 서버 폴더 목록 동기화, 이동(MOVE 또는 COPY+\Deleted+UID EXPUNGE), 휴지통·복구·비우기의 서버 반영 포함**, POP3는 로컬 폴더 전용, §2(b)), 테마, 프리셋, **서명 매니페스트 기반 업데이트 확인·알림·링크**, Velopack 패키징, 스모크 빌드, **주 서비스 4종 AR 실측(R17)** → v1.0.0 |
 | P2 MCP 서버(대화형) | MCPServer + asgi_guard + transport_security, 토큰·스코프, read/draft/send/manage 도구, 승인(스냅샷 해시), 승인 대기함, 감사, **stdio 프록시(기본) + 핸드셰이크**, Claude/MCP 패널(MCP 부분), MCP 레이트리밋 |
-| P3 자동 회신 + 간략한 답변 | **진입 게이트: R1 실측 승인(§13.2)**. 규칙(RE2)·드라이런, LoopGuard, AuthGate(AR), 잡 큐(kind), cli_locator(고정), claude_runner(argv/env/stdin/stream 검증), 출력 가드, ReplyPolicy, 고정 템플릿, 레이트리밋·회로차단·큐 상태·긴급정지, 요약·수동 초안 |
+| P3 자동 회신 + 간략한 답변 | **진입 게이트: R1 실측 승인(§13.2)**. 규칙(RE2)·드라이런, LoopGuard, AuthGate(AR), 잡 큐(kind), cli_locator(고정), claude_runner(argv/env/stdin/stream 검증), 출력 가드, ReplyPolicy, 고정 템플릿, **전역 토글(`autoreply.enabled`, 기본 off)과 컨트롤러, writer 관문 G3·G4·G7·G8, 마이그레이션 0003**, 레이트리밋·회로차단·큐 상태·긴급정지, 요약·수동 초안 |
 | P4 확장 | **OAuth2(M365/Outlook.com)**, IMAP IDLE과 대량 폴더 동기화 성능, MCP `move_message`, HTML 작성, 트레이·자동 시작, 주소록, 인쇄, eml 가져오기/내보내기, 원격 이미지(opt-in), 스레드 보기, Claude Desktop 안내 |
 | U2/P5 배포 강화 | **무인 자동설치(Velopack, Windows. macOS는 notarization 확보 시)**, 롤백, 코드서명 분기, Gmail OAuth2(선택), rc 채널. 진입 조건: P3 완료 후 **연속 14일 동안 심각도 상 결함 0건** |
 
@@ -1652,6 +1942,9 @@ v0.1 형식을 유지하고 아래를 바꿨다.
   - authserv-id
   - dmarc/dkim 결과와 `header.from`/`header.d` 필드
   - ARC 헤더가 있는지
+  - 수신 경계 Received(외부 MTA로부터 처음 받은 서비스 MTA의 Received)의 by 호스트 패턴과, AR이 그 경계보다 위에 있는지(헤더 순서 인덱스)
+  - 외부 발신자가 헤더에 위조 AR(`Authentication-Results: <실측 authserv-id>; dmarc=pass header.from=…`)을 넣어 보냈을 때, 그 헤더가 경계 아래에 남는지 아니면 서비스가 지우거나 다시 쓰는지(H-B 검증)
+  - 판정 결과(authserv-id, 경계 by 패턴, capability)를 코드 상수 `mail/ar_presets.py`로 옮긴다. 이 상수가 `confirmed`가 아닌 서비스는 §7.6에 따라 A1 자동탐지·수동입력·auto_send가 모두 비활성이다.
   - 산출물은 `docs/research/02_R17_AR실측.md`(헤더 원문 캡처, 개인정보 마스킹)이다. 서비스별로 "auto_send 가능 / 초안 전용" 판정을 적고, **P1 완료 보고 때 사용자에게 재보고**한다. 이 항목이 빠지면 P1은 Go가 될 수 없다.
 - 클린 환경(Windows 11 새 사용자 계정 또는 VM, macOS 새 사용자 계정)에서 Velopack 설치본이 설치되고 실행된다.
 - 커버리지: mail, storage 85% 이상, 전체 70% 이상.
@@ -1671,10 +1964,18 @@ v0.1 형식을 유지하고 아래를 바꿨다.
   - OPTIONS는 405, 1MB 초과는 413이다.
   - L1과 L2가 각각 독립적으로 거부한다.
 - 승인 TOCTOU: pending 상태에서 `update_draft`는 거부된다. 해시가 다르면 승인이 무효가 된다.
+- **초안 소유권(보안검토 H-1)**: `origin='user'`(사용자가 UI에서 쓴) 초안과 다른 토큰이 만든 MCP 초안에 대해 `update_draft`·`delete_draft`·`send_draft`가 모두 거부되고, 초안 내용·상태가 바뀌지 않는다.
+- **allowlist 재판정(보안검토 H-2·M-2)**
+  - 읽기 스냅샷 판정 직후 외부 BCC가 끼어든 경우(결정적 재현) `send_draft`는 거부되고 초안은 draft로 남는다(`approved_by` 없음).
+  - `send_draft`와 `update_draft`(외부 BCC 추가)를 동시에 반복 호출해도, `policy_allowlist`로 Outbox에 들어간 초안에는 허용 목록 밖 수신자가 0건이다.
+  - allowlist 모드에서 첨부가 있는 회신·새 초안은 `pending_approval`(confirm)이 된다.
+- **승인 요청 상한(보안검토 M-1)**: 같은 토큰의 4번째 동시 승인 요청은 거부된다(3건까지). 분당 6번째 요청은 거부되고 1분 뒤 다시 허용된다. 거부된 초안을 곧바로 다시 요청하면 거부되고 60초 뒤 허용된다. 다른 토큰은 별도로 집계된다.
+- **비신뢰 문자열 평문 렌더링(보안검토 H-3)**: 발송 승인 다이얼로그의 QLabel이 전부 `PlainText`이고(태그가 든 제목·계정명이 원문 그대로 표시), 메인 창 미리보기(제목·보낸사람·받는사람)·상태줄 QLabel도 `PlainText`다.
 - 감사 로그 건수가 실제 호출 건수(거부 포함)와 같다.
 - MCP 레이트리밋: 20건째는 허용, 21건째는 거부된다.
 - 프록시: 가짜 서버(공유비밀 없음)를 거부하고, 앱이 꺼져 있으면 명확한 오류를 낸다. 포트를 바꿔도 재등록이 필요 없다.
 - 포트 충돌 시 자동 변경 0회, 경고를 표시한다.
+- **핸드셰이크 포트 정확성(보안검토 M-3)**: HTTP 호스트가 예기치 않게 끝나면 `current_port()`가 즉시 `None`(MCP 비활성 응답)을 돌려주고 상태가 `running=False`로 내려간다. 상태 플래그가 남아 있어도 호스트가 죽었으면 `None`이다. 정상 종료는 소켓을 닫기 전에 상태를 먼저 내린다.
 - C-14(Origin 실측) 결과를 기록한다.
 - 커버리지: mcp_server 90% 이상(분기 포함), 전체 75% 이상.
 
@@ -1705,6 +2006,22 @@ v0.1 형식을 유지하고 아래를 바꿨다.
 - 긴급정지 후 발송 0건, 실행 중이던 잡은 cancelled다.
 - 허용 외 도구 호출(stream에 Read 등장)이 결과 폐기와 `paused_security`로 이어진다.
 - 실제 claude(e2e_claude): 즉시발송 1건, 초안 1건, 요약 1건을 확인한다. 요약 p95가 30초 이내다(10회 측정).
+- **전역 토글(§7.0) — 토글 off 시 규칙엔진 완전 비활성 확인(필수)**
+  - 새 DB(키 없음)에서 `autoreply.enabled`의 실효값이 false다. auto_send 규칙, 계정 auto_reply_enabled=1, 인증 통과 fixture를 모두 갖춘 상태에서 메일을 받아도 RuleEngine 평가 호출 0회(spy), auto_reply 잡 0건, auto_reply_log 0건, auto_reply_status NULL, ProcessRunner 실행 0회, aiosmtpd 수신 0건이다. 앱 프로세스의 자식 프로세스가 0개다(psutil).
+  - off 상태에서 MessageReceived 구독자 수가 0이고, RE2 컴파일·CLI 탐지 호출이 0회다.
+  - 끄기 드레인: queued, running(fake_claude 실행 중), outbox(origin=autoreply)가 각각 있는 상태에서 끄면 잡은 cancelled, outbox는 draft, 프로세스 트리는 0개, 발송은 0건이다. 순서 단언: DB 커밋 → 토큰 폐기 → kill(이벤트 기록 순서).
+  - 끈 뒤에 늦게 도착한 `submit_auto_reply`는 401 또는 PolicyError이고, 초안·발송은 0건이다.
+  - 껐다 켰을 때(ABA): 옛 세대 잡의 결과는 G7에서 거부되고 발송은 0건이다.
+  - 규칙 보존: 껐다 켜도 rules의 행 수, version, 내용 해시가 같다. off 상태에서 규칙 편집과 드라이런이 된다.
+  - 소급 없음: off 동안 받은 메일 N건은 켠 뒤에도 auto_reply 잡 0건이다. 켠 뒤에 받은 메일만 평가된다. 커밋과 구독 사이의 메일은 따라잡기로 평가되고 잡은 1건만 생긴다(유니크 인덱스).
+  - 기동 복구: off로 저장된 DB에 queued/running 잡과 autoreply outbox가 남아 있으면 기동 후 cancelled와 draft가 되고 queued로 돌아가지 않는다.
+  - 보호 키: `UiApi.set_setting("autoreply.enabled", True)`는 PolicyError. MCP 도구 목록에 설정·규칙 쓰기 도구가 0개다.
+  - CAS: 다른 경로에서 세대가 바뀐 뒤 옛 expected_generation으로 켜면 거부된다.
+  - 경합 스트레스: 메일을 받는 동안 토글을 100회 반복해도, 발송된 메일은 모두 "그 메일이 저장될 때 on이었고 발송 시점 세대와 같은" 잡에서 나온 것이다(발송 로그 대조).
+  - 수동 [요약]/[Claude 초안]은 off에서도 동작한다(D-12가 잠정값대로 확정될 때).
+- **writer 관문 회귀**(§7.9·§7.10): G2 판정 직후 규칙 수정, 계정 auto_reply_enabled off, trusted_authserv_id 변경을 결정적으로 끼워 넣으면 각각 draft 강등이나 cancelled로 끝나고 `policy_auto_send` outbox는 0건이다. 같은 수신자로 동시에 도는 잡 2개 중 쿨다운을 통과하는 것은 정확히 1건이다. J 도구를 대화형 토큰으로 부르면 403, 대화형 도구를 잡 토큰으로 부르면 403이다.
+- UI: 켜기 확인창의 기본 버튼은 [취소]이고 1.5초 입력잠금이 있다. off이면 상태줄이 `자동회신 ○꺼짐`, 긴급정지는 비활성이다. 확인창과 결과창은 PlainText다.
+- 매뉴얼 04(신규)·07·01이 토글 동작과 일치한다(§11.9).
 - 커버리지: rules, autoreply 90% 이상, 전체 80% 이상.
 
 **P4**
@@ -1906,8 +2223,10 @@ v0.1 형식을 유지하고 아래를 바꿨다.
   - `url`과 `release_page`는 빌드에 내장한 고정 접두사 `https://github.com/yuseungil-a11y/emailtomcp/releases/`로 시작해야 한다.
 - **서명**: minisign 형식(Ed25519, 기본 prehash `ED`, 레거시 `Ed`도 검증)이다. trusted comment에는 `app=EmailToMCP channel=stable version=<v> issued=<ts>`를 넣고 global signature까지 검증한다. trusted comment와 JSON 값이 서로 맞아야 한다.
 - **클라이언트 검증 순서**(하나라도 실패하면 그 단계에서 중단)
-  1. 크기 상한 안에서 바이트를 받는다.
+  1. 크기 상한 안에서 바이트를 받는다. (2026-10-05 보정) 매니페스트 64KB, 서명 파일 2KB로 상한을 분리하고, 요청 1건당 벽시계 전체 상한 30초를 둔다(초과 시 네트워크 오류로 "확인 불가").
   2. 내장 키(key_id 매칭, 활성 또는 예비)로 서명을 검증한다.
+     - (2026-10-05 보정) key_id가 내장 키와 **일치하는데** 본 서명 또는 global signature 검증이 실패하면 SecurityError(경보, 업데이트 자동 확인 정지).
+     - 서명 파일 형식 오류, UTF-8 오류, **내장되지 않은 key_id**는 경보가 아니라 거부("확인 불가")다. 키 회전(§14.7-6) 뒤 구버전 클라이언트나 사내 TLS 검사 장비의 차단 페이지가 가짜 경보를 내지 않게 하려는 것이다.
   3. pydantic strict로 파싱한다.
   4. app_id와 channel이 일치하는지 본다.
   5. `issued_at`이 `now + 24시간`보다 미래면 거부한다(시계 공격).
@@ -1972,9 +2291,11 @@ v0.1 형식을 유지하고 아래를 바꿨다.
 - 잡과 Outbox 상태 보존, 중복 발송 0건
 
 ### 14.7 서명키 운영 절차
-1. **생성**: 오프라인 PC에서 minisign 키쌍 **2개**(활성 K1, 예비 K2)를 만든다. 비밀키는 강한 암호로 보호한다.
+> **2026-10-05 사용자 결정(D-8): 예비키(K2) 없이 K1 단일키로 운영**. 키 분실/탈취 시 교체 절차는 추후 필요시 신규키 내장+앱 업데이트로 대응(키 회전 긴급절차는 별도 설계 없음). 출시 게이트(`test_release_build_has_embedded_keys`)는 활성(active) 키 1개만 요구한다. 아래 6~8항의 예비 키 기반 회전·유출·분실 절차는 예비 키를 도입할 경우에만 적용되는 참고 절차이며, 현재는 적용하지 않는다. 코드의 standby 역할 지원·fail-closed·미지 key_id 거부 등 서명검증 메커니즘은 그대로 유지한다.
+
+1. **생성**: 오프라인 PC에서 minisign 키쌍(활성 K1)을 만든다. 비밀키는 강한 암호로 보호한다. (원설계는 활성 K1 + 예비 K2 2개였으나 위 결정으로 K1 단일)
 2. **보관**: 비밀키는 암호화 USB 2개(주 보관, 금고 백업)에만 둔다. **GitHub Secrets, CI, 온라인 PC에는 두지 않는다.**
-3. **공개키 배포**: 앱의 `update/keys.py`에 K1과 K2 공개키(key_id 포함)를 내장한다. 공개키 지문과 설치본 SHA256을 릴리스 저장소 README와 **사내 위키(mediawiki)**의 별도 채널에 게시한다(최초 설치 TOFU 보완).
+3. **공개키 배포**: 앱의 `update/keys.py`에 K1 공개키(key_id 포함)를 내장한다. (운영 서명키 내장 완료(2026-10-05): K1 active, key_id `205BD649DF53346C`. 예비 K2는 두지 않음 — D-8) 공개키 지문과 설치본 SHA256을 릴리스 저장소 README와 **사내 위키(mediawiki)**의 별도 채널에 게시한다(최초 설치 TOFU 보완).
 4. **릴리스 서명 절차**
    1. CI가 빌드하고 **draft 릴리스**에 자산과 `manifest-candidate.json`을 올린다.
    2. 메인테이너가 자산을 받아 로컬에서 sha256을 다시 계산하고 후보와 대조한다.
@@ -2115,7 +2436,9 @@ v0.1 형식을 유지하고 아래를 바꿨다.
 | D-5 | "자동 작성됨" 고지 문구 기본 on과 문구(Q7) | on, "이 메일은 자동으로 작성되었습니다." | P3 착수 전 | 문구 상수 |
 | D-6 | Pretendard 폰트 번들 여부 | 미정(OFL 재배포 가능, 용량만 고려) | P1 중 | 설치본 크기, 표시 일관성 |
 | D-7 | ~~GitHub 조직, 코드 저장소, 릴리스 저장소 이름~~ | **결정됨(2026-10-04 사용자 확정)**: `https://github.com/yuseungil-a11y/emailtomcp.git`. 코드와 릴리스를 이 단일 공개 저장소로 겸용한다 | — | §14.4(Pages 주소, 매니페스트 예시, 고정 접두사), §15.4(release.yml 업로드 대상·PAT 범위), §0.1에 치환 완료. GitHub Pages 활성화와 실제 PAT 발급은 P1 릴리스 파이프라인 구성 시 Newton·사용자가 진행 |
-| D-8 | 서명키 보관 담당자와 백업 보관 장소(오프라인 USB 2개) | 미정 | v1.0.0 릴리스 전(P1 기간 안 마일스톤) | §14.7 운영 |
+| D-8 | 서명키 보관 담당자와 백업 보관 장소(오프라인 USB 2개) | **운영 서명키 내장 완료(2026-10-05)**: 활성 K1(key_id `205BD649DF53346C`) 공개키를 `update/keys.py`에 내장. 비밀키는 사용자가 오프라인 보관. **2026-10-05 사용자 결정: 예비키(K2) 없이 K1 단일키로 운영**. 키 분실/탈취 시 교체 절차는 추후 필요시 신규키 내장+앱 업데이트로 대응(키 회전 긴급절차는 별도 설계 없음). 출시 게이트 `test_release_build_has_embedded_keys`는 active 키 1개만 요구하도록 완화됨. **남은 것: 백업 보관 장소 확정** | v1.0.0 릴리스 전(P1 기간 안 마일스톤) | §14.7 운영 |
 | D-9 | 매니페스트 만료 주기(30일)와 재서명 담당 | 30일 | v1.0.0 릴리스 전(P1 기간 안 마일스톤) | 운영 부담 대비 동결 창 |
 | D-10 | macOS 배포 우선순위와 notarization 확보 시점, **코드서명·Apple Developer 계정 보유 여부 사실확인(Q5)** | 미보유 가정(K4) | U2 착수 전(보유 여부 확인은 빠를수록 좋음) | macOS 자동설치 가능 여부 |
+| D-11 | 자동회신 전역 토글 기본값 | **off**(설계 제안, 자동발송 기능이라 기본 비활성) | P3 착수 전 | 설정 기본값 하나. 기존 사용자도 키가 없으면 off |
+| D-12 | 수동 [요약]·[Claude 초안 만들기]와 자동요약(`auto_summary_enabled`)을 전역 토글에 묶을지 | **묶지 않음**(수동 기능은 사람이 시작하고 결과가 draft라 자동발송 위험이 없음. 자동요약은 별도 토글로 기본 off) | P3 착수 전 | 컨트롤러 적용 범위와 §11.5 표시 |
 

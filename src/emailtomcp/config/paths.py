@@ -48,3 +48,10 @@ def mail_blob_dir() -> Path:
 def lock_file_path() -> Path:
     """단일 인스턴스 보장을 위한 QLockFile 경로."""
     return data_dir() / "emailtomcp.lock"
+
+
+def jobs_dir() -> Path:
+    """자동회신 잡 전용 디렉터리의 부모(§2(c) C-9). 잡마다 하위 폴더를 만들고 끝나면 지운다."""
+    path = data_dir() / "jobs"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
