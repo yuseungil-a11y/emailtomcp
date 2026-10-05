@@ -1,0 +1,10 @@
+From: 한국도로공사 담당자 <sender2@example.com>
+To: receiver@example.com
+Subject: 한국도로공사 담당자 앞 테스트 메일 제목
+Date: Mon, 1 Sep 2025 09:00:00 +0900
+Message-ID: <raw8bit-euckr-010@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=euc-kr
+Content-Transfer-Encoding: 8bit
+
+본문 내용입니다.

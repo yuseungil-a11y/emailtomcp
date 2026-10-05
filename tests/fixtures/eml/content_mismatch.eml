@@ -1,0 +1,21 @@
+From: sender@example.com
+To: receiver@example.com
+Subject: Content mismatch test
+Date: Mon, 1 Sep 2025 09:00:00 +0900
+Message-ID: <content-mismatch-008@example.com>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="BOUNDARY008"
+
+--BOUNDARY008
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+이것은 평문 버전입니다. 안내: 송금하지 마세요. 공식 안내문입니다.
+
+--BOUNDARY008
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+<html><body><p>완전히 다른 내용의 HTML 버전입니다. 숨겨진 광고 문구와 전혀 무관한 텍스트가 들어갑니다. 구매 링크 안내.</p></body></html>
+
+--BOUNDARY008--

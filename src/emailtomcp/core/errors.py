@@ -24,3 +24,18 @@ class AuthError(PermanentError):
 
     발생하면 상위 레이어(예: 자동회신 잡 큐)는 큐 전체를 일시정지해야 한다(DESIGN.md §2.c).
     """
+
+
+class PolicyError(EmailToMcpError):
+    """정책 위반 — 스코프, 레이트리밋, 승인 규칙, 상태 전이 경합(DESIGN.md §4.4, §5.3).
+
+    재시도해도 정책이 바뀌지 않는 한 같은 결과다. MCP에서는 403이나 도구 오류로 응답한다.
+    """
+
+
+class SecurityError(EmailToMcpError):
+    """보안 위반 — 허용 외 접근 시도, 서명/HMAC 검증 실패, 같은 버전인데 다른 해시 등(§4.4).
+
+    경보를 내고 관련 기능을 정지하는 근거로 쓴다. P2 범위에서는 로컬 핸드셰이크 HMAC
+    검증 실패(가짜 서버)와 허용 외 접근 시도에만 쓴다.
+    """

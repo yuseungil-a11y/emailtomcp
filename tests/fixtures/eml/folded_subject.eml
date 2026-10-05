@@ -1,0 +1,11 @@
+From: sender@example.com
+To: receiver@example.com
+Subject: =?UTF-8?B?66ek7JqwIOq4uOqzoCDquLQg7KCc66qp7J2YIOyVnuu2gOu2hOyeheuLiOuLpCA=?=
+ =?UTF-8?B?6re466as6rOgIOydtOyWtOyngOuKlCDrkrfrtoDrtoTsnoXri4jri6Q=?=
+Date: Mon, 1 Sep 2025 09:00:00 +0900
+Message-ID: <folded-subject-007@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+제목 폴딩(folding) 테스트 본문입니다.

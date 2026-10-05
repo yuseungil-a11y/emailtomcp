@@ -36,9 +36,26 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--mcp-port",
         type=int,
-        default=0,
+        default=None,
         metavar="PORT",
-        help="MCP 서버 포트 (0이면 자동 선택). P2(MCP 서버)에서 실제로 쓰이며, 지금은 파싱만 한다.",
+        help=(
+            "MCP 서버 포트(기본: 설정의 mcp.port, 처음엔 8765). 0(임의 포트)은 dev·테스트 "
+            "빌드에서만 허용한다. 포트가 사용 중이면 다른 포트로 바꾸지 않고 MCP를 끈다."
+        ),
+    )
+    parser.add_argument(
+        "--mcp-stdio-proxy",
+        action="store_true",
+        help=(
+            "Claude Code/Desktop용 stdio 프록시로 실행한다(창·DB 없이, 실행 중인 앱에 중계). "
+            "토큰은 OS keyring에서 읽는다."
+        ),
+    )
+    parser.add_argument(
+        "--client",
+        default="default",
+        metavar="NAME",
+        help="stdio 프록시가 쓸 토큰 프로필 이름(기본 default, --mcp-stdio-proxy와 함께 사용).",
     )
     return parser
 
@@ -49,6 +66,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.data_dir:
         os.environ["EMAILTOMCP_DATA_DIR"] = args.data_dir
+
+    if args.mcp_stdio_proxy:
+        # 프록시 모드: QApplication·DB를 만들지 않는다(§6.4). keyring과 HTTP 중계만 쓴다.
+        from emailtomcp.mcp_server.stdio_proxy import run_stdio_proxy
+        from emailtomcp.secrets.keyring_store import KeyringSecretStore
+
+        return run_stdio_proxy(secret_store=KeyringSecretStore(), client=args.client)
 
     # 여기서부터만 Qt/DB/네트워크를 건드리는 무거운 모듈을 import한다.
     from emailtomcp.app import run_app

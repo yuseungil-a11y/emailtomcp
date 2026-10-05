@@ -1,0 +1,11 @@
+From: sender@example.com
+To: receiver@example.com
+Subject: UTF-8 plain test
+Date: Mon, 1 Sep 2025 09:00:00 +0900
+Message-ID: <utf8-plain-001@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+안녕하세요. UTF-8 본문 테스트입니다.
+한글이 깨지지 않아야 합니다.

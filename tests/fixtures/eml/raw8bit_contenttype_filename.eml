@@ -1,0 +1,20 @@
+From: sender@example.com
+To: receiver@example.com
+Subject: Raw 8bit content-type filename test
+Date: Mon, 1 Sep 2025 09:00:00 +0900
+Message-ID: <raw8bit-ctfilename-012@example.com>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="BOUNDARY012"
+
+--BOUNDARY012
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+Raw 8bit content-type filename test.
+
+--BOUNDARY012
+Content-Type: image/jpeg; name="첨부사진.jpg"
+Content-Transfer-Encoding: base64
+
+ZHVtbXkganBnIGNvbnRlbnQ=
+--BOUNDARY012--

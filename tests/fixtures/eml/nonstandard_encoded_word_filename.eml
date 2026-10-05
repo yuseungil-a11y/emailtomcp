@@ -1,0 +1,21 @@
+From: sender@example.com
+To: receiver@example.com
+Subject: Non-standard encoded-word filename test
+Date: Mon, 1 Sep 2025 09:00:00 +0900
+Message-ID: <nonstd-encword-006@example.com>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="BOUNDARY006"
+
+--BOUNDARY006
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+Non-standard encoded-word filename test.
+
+--BOUNDARY006
+Content-Type: application/vnd.ms-excel
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="=?EUC-KR?B?sN/A+7ytLnhsc3g=?="
+
+ZHVtbXkgY29udGVudA==
+--BOUNDARY006--

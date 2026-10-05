@@ -1,0 +1,10 @@
+From: sender@example.com
+To: receiver@example.com
+Subject: CP949 plain test
+Date: Mon, 1 Sep 2025 09:00:00 +0900
+Message-ID: <cp949-plain-003@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=cp949
+Content-Transfer-Encoding: 8bit
+
+안녕하세요. CP949 확장 완성형 테스트: 뀨뀰 쀍 테스트입니다.

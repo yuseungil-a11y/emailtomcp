@@ -70,7 +70,7 @@
 | 보조 버튼(취소 등) | 투명 배경 + `border` 테두리 + `foreground` 텍스트 |
 | [삭제]/[거부]/[긴급정지] | `destructive` 배경 또는 텍스트 |
 | 승인 다이얼로그 | 외부 도메인 수신자는 `favorite`(주황) 배지로 강조, 승인 버튼은 지연 활성화 후 `primary-gradient` |
-| 상태줄(MCP 연결, claude CLI) | `surface-muted` 배경, 연결됨=`success` 점, 끊김=`destructive` 점 |
+| 상태줄(메일 서버, MCP 서버, Claude 연결) | `surface-muted` 배경. 3단계 점 색상(QSS `statusDot` 속성, 2026-10-04 추가): 정상/연결됨=`success`(#248ff4), 연결중·대기=`primary-muted`(#8a90fc), 오류/끊김=`destructive`(#f15347). 메일 서버는 계정별로 폴더 트리에, 전체 집계는 상태줄에 표시한다 |
 | 링크 | `primary`, 밑줄은 호버 시만 |
 
 ## 4. Qt 구현 지침
@@ -82,4 +82,4 @@
 
 ## 5. 후속 작업
 - 실제 Pretendard 폰트 파일 포함 여부는 P1에서 결정(라이선스는 OFL로 재배포 가능 확인됨 — 바이너리 용량만 고려).
-- 로고/앱 아이콘은 유티정보 브랜드 로고를 그대로 쓰지 않고(사내 제품이 아닌 한 사내 자산 오용 소지), 동일 컬러 팔레트(#5678ff 계열)의 자체 이메일 아이콘을 새로 제작할 것을 권고.
+- ~~로고/앱 아이콘은 유티정보 브랜드 로고를 그대로 쓰지 않고(사내 제품이 아닌 한 사내 자산 오용 소지), 동일 컬러 팔레트(#5678ff 계열)의 자체 이메일 아이콘을 새로 제작할 것을 권고.~~ → **완료(2026-10-04)**: 편지봉투+스파크(자동화) 모티프로 자체 제작. 소스 `packaging/icons/make_icon.py`(Pillow로 직접 그림, 외부 이미지 사용 없음), 산출물은 `src/emailtomcp/ui/resources/icons/`(app_icon.ico/.icns/.png)와 `packaging/icons/`에 있다.

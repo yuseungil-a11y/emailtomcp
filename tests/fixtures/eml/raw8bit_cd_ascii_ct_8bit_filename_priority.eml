@@ -1,0 +1,21 @@
+From: sender@example.com
+To: receiver@example.com
+Subject: CD ascii vs CT 8bit filename priority test
+Date: Mon, 1 Sep 2025 09:00:00 +0900
+Message-ID: <raw8bit-cd-ascii-ct-8bit-013@example.com>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="BOUNDARY013"
+
+--BOUNDARY013
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+Content-Disposition(ASCII) vs Content-Type(8bit) filename priority test.
+
+--BOUNDARY013
+Content-Type: application/pdf; name="다른이름.pdf"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="ascii.pdf"
+
+ZHVtbXkgcGRmIGNvbnRlbnQ=
+--BOUNDARY013--

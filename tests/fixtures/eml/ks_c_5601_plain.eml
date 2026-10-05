@@ -1,0 +1,10 @@
+From: sender@example.com
+To: receiver@example.com
+Subject: ks_c_5601-1987 alias test
+Date: Mon, 1 Sep 2025 09:00:00 +0900
+Message-ID: <ksc5601-plain-004@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=ks_c_5601-1987
+Content-Transfer-Encoding: 8bit
+
+안녕하세요. ks_c_5601-1987 라벨 별칭 매핑 테스트입니다.

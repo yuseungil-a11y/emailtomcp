@@ -1,0 +1,22 @@
+From: sender@example.com
+To: receiver@example.com
+Subject: RFC2231 attachment filename test
+Date: Mon, 1 Sep 2025 09:00:00 +0900
+Message-ID: <rfc2231-attach-005@example.com>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="BOUNDARY005"
+
+--BOUNDARY005
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+Hello, this message has an RFC2231-encoded attachment filename.
+
+--BOUNDARY005
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment;
+ filename*=UTF-8''%ED%95%9C%EA%B8%80%ED%8C%8C%EC%9D%BC%2E%74%78%74
+
+7LKo67aAIOuCtOyaqeyeheuLiOuLpC4NCg==
+--BOUNDARY005--
