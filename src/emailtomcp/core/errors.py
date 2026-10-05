@@ -2,13 +2,29 @@
 
 재시도 가능한 오류와 영구 오류를 명확히 구분해, 자동회신 잡 러너나 동기화 서비스가
 "재시도할지 즉시 포기할지"를 예외 타입만으로 판단할 수 있게 한다.
+
+`error_code`(`core.error_codes.ErrorCode`)는 이 계층과는 별개 축이다 — Transient/
+Permanent/Auth/Policy/Security는 "재시도 가능한가"를 판단하는 용도이고, `error_code`는
+"로그에서 사람이 어떤 상황인지 바로 식별"하게 하는 순수 진단 목적이다(autoreply/rules의
+`reason_code`와도 무관 — 그건 그대로 둔다). 지정하지 않으면 `None`이다.
 """
 
 from __future__ import annotations
 
+from emailtomcp.core.error_codes import ErrorCode
+
 
 class EmailToMcpError(Exception):
-    """EmailToMCP 전체 공통 베이스 예외."""
+    """EmailToMCP 전체 공통 베이스 예외.
+
+    `error_code`는 키워드 인자로만 받는다(호출부의 메시지 포지셔널 인자와 섞이지
+    않게). 지정하지 않은 예외는 `error_code`가 `None`이며, 로그 포매터는 그 경우
+    코드를 붙이지 않는다.
+    """
+
+    def __init__(self, *args: object, error_code: ErrorCode | None = None) -> None:
+        super().__init__(*args)
+        self.error_code = error_code
 
 
 class TransientError(EmailToMcpError):

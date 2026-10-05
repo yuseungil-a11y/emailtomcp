@@ -11,6 +11,7 @@ import logging
 import smtplib
 import ssl
 
+from emailtomcp.core.error_codes import ErrorCode
 from emailtomcp.core.errors import AuthError, PermanentError, TransientError
 
 logger = logging.getLogger(__name__)
@@ -42,14 +43,17 @@ def _connect(host: str, port: int, security: str, *, timeout: float) -> smtplib.
         if not conn.has_extn("starttls"):
             raise PermanentError(
                 f"SMTP 서버({host}:{port})가 STARTTLS를 지원하지 않습니다. "
-                "평문으로 다운그레이드하지 않습니다(§8.7)."
+                "평문으로 다운그레이드하지 않습니다(§8.7).",
+                error_code=ErrorCode.SMTP_CONNECT_FAILED,
             )
         conn.starttls(context=_ssl_context())
         conn.ehlo()
         return conn
     if security == "none":
         return smtplib.SMTP(host, port, timeout=timeout)
-    raise PermanentError(f"알 수 없는 보안 모드입니다: {security}")
+    raise PermanentError(
+        f"알 수 없는 보안 모드입니다: {security}", error_code=ErrorCode.SMTP_CONNECT_FAILED
+    )
 
 
 def test_connection(
@@ -68,13 +72,21 @@ def test_connection(
         if username is not None and password is not None:
             conn.login(username, password)
     except smtplib.SMTPAuthenticationError as exc:
-        raise AuthError(f"SMTP 인증 실패: {exc}") from exc
+        raise AuthError(f"SMTP 인증 실패: {exc}", error_code=ErrorCode.SMTP_AUTH_FAILED) from exc
     except smtplib.SMTPResponseException as exc:
         if 500 <= exc.smtp_code < 600:
-            raise PermanentError(f"SMTP 영구 오류({exc.smtp_code}): {exc.smtp_error!r}") from exc
-        raise TransientError(f"SMTP 일시 오류({exc.smtp_code}): {exc.smtp_error!r}") from exc
+            raise PermanentError(
+                f"SMTP 영구 오류({exc.smtp_code}): {exc.smtp_error!r}",
+                error_code=ErrorCode.SMTP_RESPONSE_ERROR,
+            ) from exc
+        raise TransientError(
+            f"SMTP 일시 오류({exc.smtp_code}): {exc.smtp_error!r}",
+            error_code=ErrorCode.SMTP_RESPONSE_ERROR,
+        ) from exc
     except (smtplib.SMTPException, OSError, TimeoutError) as exc:
-        raise TransientError(f"SMTP 통신 실패: {exc}") from exc
+        raise TransientError(
+            f"SMTP 통신 실패: {exc}", error_code=ErrorCode.SMTP_CONNECT_FAILED
+        ) from exc
     finally:
         if conn is not None:
             with contextlib.suppress(Exception):
@@ -108,29 +120,42 @@ def send_mail(
             if not conn.has_extn("starttls"):
                 raise PermanentError(
                     f"SMTP 서버({host}:{port})가 STARTTLS를 지원하지 않습니다. "
-                    "평문으로 다운그레이드하지 않습니다(§8.7)."
+                    "평문으로 다운그레이드하지 않습니다(§8.7).",
+                    error_code=ErrorCode.SMTP_CONNECT_FAILED,
                 )
             conn.starttls(context=_ssl_context())
             conn.ehlo()
         elif security == "none":
             conn = smtplib.SMTP(host, port, timeout=timeout)
         else:
-            raise PermanentError(f"알 수 없는 보안 모드입니다: {security}")
+            raise PermanentError(
+                f"알 수 없는 보안 모드입니다: {security}", error_code=ErrorCode.SMTP_CONNECT_FAILED
+            )
 
         if username is not None and password is not None:
             conn.login(username, password)
 
         conn.sendmail(mail_from, rcpt_tos, raw_bytes)
     except smtplib.SMTPAuthenticationError as exc:
-        raise AuthError(f"SMTP 인증 실패: {exc}") from exc
+        raise AuthError(f"SMTP 인증 실패: {exc}", error_code=ErrorCode.SMTP_AUTH_FAILED) from exc
     except smtplib.SMTPRecipientsRefused as exc:
-        raise PermanentError(f"SMTP 수신자 거부: {exc.recipients}") from exc
+        raise PermanentError(
+            f"SMTP 수신자 거부: {exc.recipients}", error_code=ErrorCode.SMTP_RECIPIENTS_REFUSED
+        ) from exc
     except smtplib.SMTPResponseException as exc:
         if 500 <= exc.smtp_code < 600:
-            raise PermanentError(f"SMTP 영구 오류({exc.smtp_code}): {exc.smtp_error!r}") from exc
-        raise TransientError(f"SMTP 일시 오류({exc.smtp_code}): {exc.smtp_error!r}") from exc
+            raise PermanentError(
+                f"SMTP 영구 오류({exc.smtp_code}): {exc.smtp_error!r}",
+                error_code=ErrorCode.SMTP_RESPONSE_ERROR,
+            ) from exc
+        raise TransientError(
+            f"SMTP 일시 오류({exc.smtp_code}): {exc.smtp_error!r}",
+            error_code=ErrorCode.SMTP_RESPONSE_ERROR,
+        ) from exc
     except (smtplib.SMTPException, OSError, TimeoutError) as exc:
-        raise TransientError(f"SMTP 통신 실패: {exc}") from exc
+        raise TransientError(
+            f"SMTP 통신 실패: {exc}", error_code=ErrorCode.SMTP_COMM_FAILED
+        ) from exc
     finally:
         if conn is not None:
             try:

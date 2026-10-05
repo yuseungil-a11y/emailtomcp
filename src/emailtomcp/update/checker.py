@@ -273,13 +273,22 @@ class UpdateChecker:
                 save_trust=None if self._dev_build else self._store.save_trust,
             )
         except SecurityError as exc:
-            logger.error("업데이트 보안 경보: %s", exc)
+            logger.error(
+                "업데이트 보안 경보: %s", exc, extra={"error_code": exc.error_code}
+            )
             return replace(base, kind=StatusKind.SECURITY_ALERT.value, reason=str(exc), halted=True)
         except TransientError as exc:
-            logger.info("업데이트 확인 실패(네트워크): %s", exc)
+            logger.info(
+                "업데이트 확인 실패(네트워크): %s", exc, extra={"error_code": exc.error_code}
+            )
             return self._fail(base, f"네트워크 오류로 확인하지 못했습니다({exc})")
         except ManifestRejected as exc:
-            logger.warning("업데이트 매니페스트 거부(%s단계): %s", exc.step, exc.reason)
+            logger.warning(
+                "업데이트 매니페스트 거부(%s단계): %s",
+                exc.step,
+                exc.reason,
+                extra={"error_code": exc.error_code},
+            )
             if isinstance(exc.__cause__, UnknownSigningKey):
                 # 키 회전 후 구버전: 경보가 아니라 수동 업데이트 안내(M-1)
                 return self._fail(base, exc.reason)

@@ -34,6 +34,7 @@ from enum import StrEnum
 
 from pydantic import ValidationError
 
+from emailtomcp.core.error_codes import ErrorCode
 from emailtomcp.core.errors import PermanentError, SecurityError
 from emailtomcp.update.keys import SignatureUnverifiable, TrustedKey, verify_minisign
 from emailtomcp.update.manifest import (
@@ -56,7 +57,7 @@ class ManifestRejected(PermanentError):
     """검증 단계에서 매니페스트를 거부했다(보안 경보 수준은 아님). `step`은 실패한 단계 번호."""
 
     def __init__(self, step: int, reason: str) -> None:
-        super().__init__(reason)
+        super().__init__(reason, error_code=ErrorCode.UPDATE_MANIFEST_REJECTED)
         self.step = step
         self.reason = reason
 
@@ -200,7 +201,8 @@ def verify_manifest(
         if previous is not None and previous != entry:
             raise SecurityError(
                 f"같은 버전({version})의 산출물({slot}) 해시가 이전과 다릅니다"
-                " — 업데이트를 정지합니다"
+                " — 업데이트를 정지합니다",
+                error_code=ErrorCode.UPDATE_SIGNATURE_INVALID,
             )
 
     # [10] 상태 저장

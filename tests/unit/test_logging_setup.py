@@ -17,6 +17,8 @@ import pytest
 
 from emailtomcp import app as app_module
 from emailtomcp.config import paths
+from emailtomcp.core.error_codes import ErrorCode
+from emailtomcp.core.errors import AuthError
 
 
 @pytest.fixture(autouse=True)
@@ -123,3 +125,93 @@ def test_secret_masking_filter_leaves_normal_messages_untouched() -> None:
     masking_filter.filter(record)
 
     assert record.getMessage() == "계정 1 수신 동기화 완료: 3건 저장"
+
+
+class TestErrorCodeFormatter:
+    """`_ErrorCodeFormatter` — 예외/에러 로그에 `EMCP-XXXX` 코드를 덧붙이는지 확인."""
+
+    def _formatter(self) -> app_module._ErrorCodeFormatter:
+        return app_module._ErrorCodeFormatter("%(levelname)s %(message)s")
+
+    def test_appends_code_from_exc_info_attribute(self) -> None:
+        formatter = self._formatter()
+        try:
+            raise AuthError("IMAP 인증 실패", error_code=ErrorCode.IMAP_AUTH_FAILED)
+        except AuthError:
+            record = logging.LogRecord(
+                name="emailtomcp.test",
+                level=logging.ERROR,
+                pathname=__file__,
+                lineno=1,
+                msg="IMAP 연결 실패",
+                args=None,
+                exc_info=__import__("sys").exc_info(),
+            )
+
+        formatted = formatter.format(record)
+
+        assert "EMCP-1002" in formatted
+
+    def test_appends_code_from_extra_even_without_exc_info(self) -> None:
+        formatter = self._formatter()
+        record = logging.LogRecord(
+            name="emailtomcp.test",
+            level=logging.WARNING,
+            pathname=__file__,
+            lineno=1,
+            msg="포트를 사용할 수 없습니다",
+            args=None,
+            exc_info=None,
+        )
+        record.error_code = ErrorCode.MCP_PORT_UNAVAILABLE
+
+        formatted = formatter.format(record)
+
+        assert "EMCP-3002" in formatted
+
+    def test_plain_log_without_error_code_is_unchanged(self) -> None:
+        formatter = self._formatter()
+        record = logging.LogRecord(
+            name="emailtomcp.test",
+            level=logging.INFO,
+            pathname=__file__,
+            lineno=1,
+            msg="계정 1 수신 동기화 완료: 3건 저장",
+            args=None,
+            exc_info=None,
+        )
+
+        formatted = formatter.format(record)
+
+        assert "EMCP-" not in formatted
+        assert formatted == "INFO 계정 1 수신 동기화 완료: 3건 저장"
+
+    def test_does_not_mutate_record_for_reuse_across_handlers(self) -> None:
+        """같은 포매터 인스턴스를 여러 핸들러가 공유해도 코드가 중복으로 붙지 않아야 한다."""
+        formatter = self._formatter()
+        record = logging.LogRecord(
+            name="emailtomcp.test",
+            level=logging.WARNING,
+            pathname=__file__,
+            lineno=1,
+            msg="메시지",
+            args=None,
+            exc_info=None,
+        )
+        record.error_code = ErrorCode.UNKNOWN
+
+        first = formatter.format(record)
+        second = formatter.format(record)
+
+        assert first == second
+        assert first.count("EMCP-9000") == 1
+
+
+def test_setup_logging_uses_error_code_formatter(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv(paths.ENV_DATA_DIR, str(tmp_path))
+
+    app_module.setup_logging()
+
+    logger = logging.getLogger("emailtomcp")
+    for handler in logger.handlers:
+        assert isinstance(handler.formatter, app_module._ErrorCodeFormatter)

@@ -19,6 +19,7 @@ import ssl
 from imapclient import FLAGGED, SEEN, IMAPClient
 from imapclient.exceptions import IMAPClientError, LoginError
 
+from emailtomcp.core.error_codes import ErrorCode
 from emailtomcp.core.errors import AuthError, PermanentError, TransientError
 from emailtomcp.mail.incoming.base import FetchedMessage, RemoteFolder, RemoteMessageSummary
 
@@ -130,9 +131,13 @@ class ImapIncomingProvider:
             self._client = client
             self._selected = None
         except LoginError as exc:
-            raise AuthError(f"IMAP 인증 실패: {exc}") from exc
+            raise AuthError(
+                f"IMAP 인증 실패: {exc}", error_code=ErrorCode.IMAP_AUTH_FAILED
+            ) from exc
         except (IMAPClientError, OSError, TimeoutError) as exc:
-            raise TransientError(f"IMAP 연결 실패: {exc}") from exc
+            raise TransientError(
+                f"IMAP 연결 실패: {exc}", error_code=ErrorCode.IMAP_CONNECT_FAILED
+            ) from exc
 
     def _require_client(self) -> IMAPClient:
         if self._client is None:

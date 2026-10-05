@@ -155,19 +155,31 @@ class SendService:
                 raw_bytes=built.raw_bytes,
             )
         except AuthError as exc:
-            logger.warning("초안 %s 발송 실패(인증 오류): %s", draft.id, exc)
+            logger.warning(
+                "초안 %s 발송 실패(인증 오류): %s",
+                draft.id,
+                exc,
+                extra={"error_code": exc.error_code},
+            )
             drafts_repo.mark_failed(self._db, draft.id, last_error=str(exc))
             self._publish_account_error(draft.account_id, str(exc), now_iso)
             self._publish_send_failed(draft.id, str(exc), now_iso)
             return "failed(auth)"
         except PermanentError as exc:
-            logger.warning("초안 %s 발송 실패: %s", draft.id, exc)
+            logger.warning(
+                "초안 %s 발송 실패: %s", draft.id, exc, extra={"error_code": exc.error_code}
+            )
             drafts_repo.mark_failed(self._db, draft.id, last_error=str(exc))
             self._publish_account_error(draft.account_id, str(exc), now_iso)
             self._publish_send_failed(draft.id, str(exc), now_iso)
             return "failed"
         except TransientError as exc:
-            logger.warning("초안 %s 발송 일시 오류, 재시도 예정: %s", draft.id, exc)
+            logger.warning(
+                "초안 %s 발송 일시 오류, 재시도 예정: %s",
+                draft.id,
+                exc,
+                extra={"error_code": exc.error_code},
+            )
             self._retry_or_fail(draft, str(exc))
             self._publish_account_error(draft.account_id, str(exc), now_iso)
             return "retry_or_failed"

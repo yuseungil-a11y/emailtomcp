@@ -7,9 +7,11 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
+from emailtomcp.core.error_codes import ErrorCode
 from emailtomcp.core.errors import PermanentError
 from emailtomcp.storage.migrations import (
     m0001_init,
@@ -17,6 +19,8 @@ from emailtomcp.storage.migrations import (
     m0003_autoreply_toggle,
     m0004_folder_initial_sync,
 )
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     import sqlite3
@@ -50,7 +54,8 @@ def run_migrations(conn: sqlite3.Connection) -> int:
     if current > CURRENT_SCHEMA_VERSION:
         raise PermanentError(
             f"DB user_version({current})이 이 앱이 아는 최대 버전({CURRENT_SCHEMA_VERSION})보다 "
-            "큽니다. 더 최신 버전의 앱으로 실행하세요."
+            "큽니다. 더 최신 버전의 앱으로 실행하세요.",
+            error_code=ErrorCode.DB_SCHEMA_TOO_NEW,
         )
     for version in range(current + 1, CURRENT_SCHEMA_VERSION + 1):
         migrate_fn = MIGRATIONS[version]
@@ -60,6 +65,11 @@ def run_migrations(conn: sqlite3.Connection) -> int:
             set_user_version(conn, version)
         except BaseException:
             conn.rollback()
+            logger.exception(
+                "DB 마이그레이션 실패(version=%s) — 롤백했습니다",
+                version,
+                extra={"error_code": ErrorCode.DB_MIGRATION_FAILED},
+            )
             raise
         else:
             conn.commit()

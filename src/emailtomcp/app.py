@@ -42,6 +42,7 @@ from emailtomcp.autoreply.process_runner import SubprocessRunner
 from emailtomcp.config import paths
 from emailtomcp.config.settings import get_setting, set_setting
 from emailtomcp.core.clock import Clock, SystemClock
+from emailtomcp.core.error_codes import ErrorCode
 from emailtomcp.core.errors import (
     AuthError,
     EmailToMcpError,
@@ -119,7 +120,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-SINGLE_INSTANCE_KEY = "EmailToMCP-single-instance"
 THEME_PACKAGE = "emailtomcp.ui.resources.themes"
 ICON_PACKAGE = "emailtomcp.ui.resources.icons"
 
@@ -217,6 +217,32 @@ class _SecretMaskingFilter(logging.Filter):
         return True
 
 
+class _ErrorCodeFormatter(logging.Formatter):
+    """예외/에러 로그 줄 끝에 `core.error_codes.ErrorCode`를 덧붙인다(진단용).
+
+    코드가 없는(일반) 로그는 그대로 둔다 — 모든 로그에 강제로 코드를 붙이지 않는다.
+    코드 확인 순서:
+    1. `logger.error(..., extra={"error_code": ErrorCode.XXX})`처럼 명시한 값
+       (`record.error_code`).
+    2. `logger.exception(...)`/`logger.error(..., exc_info=True)`로 로깅한 예외
+       객체가 `error_code` 속성을 가지고 있으면 그 값(`core.errors.EmailToMcpError`
+       계열).
+    둘 다 없으면 코드를 붙이지 않는다. 여러 핸들러가 같은 포매터 인스턴스를 공유할
+    수 있으므로 `record`는 변형하지 않고, 반환 문자열에만 덧붙인다.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        formatted = super().format(record)
+        code = getattr(record, "error_code", None)
+        if code is None and record.exc_info:
+            exc = record.exc_info[1]
+            code = getattr(exc, "error_code", None)
+        if code is None:
+            return formatted
+        value = code.value if isinstance(code, ErrorCode) else code
+        return f"{formatted} [{value}]"
+
+
 def _log_unhandled_exception(
     exc_type: type[BaseException], exc_value: BaseException, exc_tb: object
 ) -> None:
@@ -241,7 +267,7 @@ def setup_logging() -> None:
     root_logger = logging.getLogger("emailtomcp")
     root_logger.setLevel(logging.INFO)
 
-    formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
+    formatter = _ErrorCodeFormatter("%(asctime)s %(levelname)s %(name)s %(message)s")
 
     file_handler = logging.handlers.TimedRotatingFileHandler(
         log_path, when="midnight", interval=1, backupCount=7, encoding="utf-8"
@@ -622,7 +648,11 @@ class UiApi:
             finally:
                 provider.close()
         except (TransientError, EmailToMcpError) as exc:
-            logger.warning("IMAP 서버 반영에 실패했습니다(로컬 변경은 유지): %s", exc)
+            logger.warning(
+                "IMAP 서버 반영에 실패했습니다(로컬 변경은 유지): %s",
+                exc,
+                extra={"error_code": exc.error_code},
+            )
 
     async def move_to_trash(self, message_id: int) -> None:
         """휴지통 폴더로 옮긴다. IMAP 계정이면 서버에도 이동을 반영한다(§2(b), §12.3 ⑯).
@@ -1565,7 +1595,11 @@ class McpServiceRunner:
         try:
             sock = create_loopback_socket(self._configured_port)
         except PortUnavailableError as exc:
-            logger.warning("MCP 서버를 시작하지 못했습니다(포트 자동 변경 없음): %s", exc)
+            logger.warning(
+                "MCP 서버를 시작하지 못했습니다(포트 자동 변경 없음): %s",
+                exc,
+                extra={"error_code": ErrorCode.MCP_PORT_UNAVAILABLE},
+            )
             self._set_state(
                 running=False,
                 port=self._configured_port,
@@ -1586,7 +1620,9 @@ class McpServiceRunner:
         try:
             await host.start()
         except Exception as exc:  # noqa: BLE001 — 시작 실패는 상태로 알리고 앱은 계속 동작
-            logger.exception("MCP HTTP 서버 시작 실패")
+            logger.exception(
+                "MCP HTTP 서버 시작 실패", extra={"error_code": ErrorCode.MCP_SERVER_START_FAILED}
+            )
             self._set_state(running=False, port=port, error=str(exc))
             return
         if not host.running:
@@ -1636,6 +1672,12 @@ class SingleInstanceGuard:
     로컬 서버가 받는 명령은 **`activate`와 `mcp_handshake` 두 가지뿐**이다(L2, §6.4).
     해석은 Qt를 모르는 `mcp_server.local_handshake.parse_command`가 하고, 그 밖의 입력은
     응답 없이 연결을 끊는다.
+
+    실제 단일 인스턴스 판정은 `QLockFile.tryLock`(데이터 디렉터리별 잠금 파일)이 한다.
+    `key`(기본 `local_handshake.SINGLE_INSTANCE_KEY`, OS 사용자별로 구분됨, 보안검토 P2 L-1)로
+    여는 `QLocalServer`는 그 승자에게 "활성화 요청"과 "MCP 핸드셰이크 중계"를 전달하는
+    보조 채널이다 — `listen()`이 실패해도(L-1) `try_acquire`는 여전히 True를 반환한다
+    (가용성 우선, 경고 로그만 남김).
     """
 
     _IDLE_TIMEOUT_MS = 3000
@@ -1653,20 +1695,50 @@ class SingleInstanceGuard:
             QLocalServer.removeServer(self._key)
             self._server = QLocalServer()
             self._server.setSocketOptions(QLocalServer.SocketOption.UserAccessOption)
-            self._server.listen(self._key)
-            self._on_activate = on_activate_requested
-            self._on_handshake = on_handshake
-            self._server.newConnection.connect(self._on_new_connection)
+            if self._server.listen(self._key):
+                self._on_activate = on_activate_requested
+                self._on_handshake = on_handshake
+                self._server.newConnection.connect(self._on_new_connection)
+            else:
+                # 보안검토 P2 L-1: listen() 실패를 확인하지 않으면, 이 프로세스가
+                # (파일 잠금상으로는) 데이터 디렉터리 기준 '첫 인스턴스'인데도 활성화
+                # 신호·MCP 핸드셰이크 중계를 받을 방법이 없는 채로 조용히 계속 진행했다
+                # — 다른 사용자/데이터 디렉터리의 인스턴스가 같은 이름을 먼저 잡았거나,
+                # 고아 파이프가 남아있는 경우다. 앱 기동 자체를 막는 것은 가용성(DoS) 관점에서
+                # 더 위험하므로(토큰 유출 문제는 아니다) 경고만 남기고 계속 진행한다 — 단,
+                # 이 인스턴스는 활성화 요청도 MCP stdio 핸드셰이크 중계도 받지 못한다.
+                logger.warning(
+                    "단일 인스턴스 로컬 서버 바인딩에 실패했습니다(%s): %s — 활성화 신호와 "
+                    "MCP stdio 프록시 핸드셰이크를 받지 못한 채로 계속 기동합니다",
+                    self._server.errorString(),
+                    self._key,
+                    extra={"error_code": ErrorCode.SINGLE_INSTANCE_LISTEN_FAILED},
+                )
+                self._server = None
             return True
 
         # 이미 떠 있는 인스턴스에 활성화 요청을 보낸다.
+        #
+        # 이 시점(`run_app()`의 `app.exec()` 호출 **전**)에는 이벤트 루프가 아직 한 번도
+        # 돌지 않았다. `waitForBytesWritten`/`waitForDisconnected`는 블로킹 호출이지만,
+        # 실측 결과(이 PC·PySide6 6.11) 이 상태에서는 실제 쓰기 완료 통지가 오지 않고
+        # 거짓(False)을 반환할 수 있었다 — 그대로 소켓을 파괴하면 "activate" 바이트가
+        # 상대에게 전달되기 전에 날아가 버려(두 번째 실행이 아무 효과 없이 조용히 종료,
+        # 기존 창이 활성화되지 않음) 두 번째 실행 시 안내 동작이 실패한다.
+        # `processEvents()`로 짧게 펌핑해 실제 쓰기·종료 통지가 처리되게 한다.
         socket = QLocalSocket()
         socket.connectToServer(self._key)
         if socket.waitForConnected(200):
             socket.write(b"activate\n")
             socket.flush()
+            QApplication.processEvents()
             socket.waitForBytesWritten(200)
+            QApplication.processEvents()
             socket.disconnectFromServer()
+            QApplication.processEvents()
+            if socket.state() != QLocalSocket.LocalSocketState.UnconnectedState:
+                socket.waitForDisconnected(200)
+                QApplication.processEvents()
         return False
 
     def _on_new_connection(self) -> None:
@@ -1742,7 +1814,7 @@ def run_app(mcp_port: int | None = None) -> int:
     app_icon = _load_app_icon()
     app.setWindowIcon(app_icon)
 
-    guard = SingleInstanceGuard(SINGLE_INSTANCE_KEY)
+    guard = SingleInstanceGuard(local_handshake.SINGLE_INSTANCE_KEY)
     window_holder: dict[str, MainWindow] = {}
     # 로컬 핸드셰이크(§6.4)는 아래에서 공유비밀과 MCP 러너가 준비된 뒤에 채운다.
     handshake_holder: dict[str, object] = {}

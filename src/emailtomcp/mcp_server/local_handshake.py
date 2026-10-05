@@ -18,11 +18,24 @@ Windows에서는 이름 있는 파이프(`\\\\.\\pipe\\<이름>`), 그 밖의 OS
    포트도 HMAC에 묶여 있으므로 응답의 포트만 바꿔치기할 수도 없다.
 
 공유비밀 자체는 전송하지 않는다(§8.3).
+
+이름 범위(보안검토 P2 L-1, 데카르트 QA #48 M-1/M-2 수정 반영): 파이프/소켓 이름은 OS
+사용자별로 구분된다 — 같은 PC의 다른 Windows 계정이 띄운 인스턴스와 이름이 겹쳐 서로의
+`listen()`을 가로막지 않게 한다. 사용자 식별은 환경변수(`getpass.getuser()`가 Windows에서
+읽는 `USERNAME` 등)가 아니라 **OS API**로 얻는다 — GUI 프로세스와 MCP stdio 프록시
+프로세스가 서로 다른(축소된) 환경변수를 가지고 있어도 같은 계정이면 항상 같은 값을 얻는다
+(M-2, 환경변수 기반이었던 과거 구현의 회귀). 얻은 식별값은 `sha256(...)[:16]`으로 해시해
+키에 섞는다 — 한글 계정명도 영문 계정명과 동등하게 안전히 구분되고(M-1, 단순히 `_`로
+치환·strip하면 한글 계정명은 전부 빈 문자열이 되어 충돌했다), 원본 계정명이 파이프 이름에
+그대로 노출되지도 않는다. 식별값을 전혀 얻을 수 없는 드문 경우(서비스 계정 등)에는 사용자
+구분 없이 과거와 같은 공용 이름으로 내려간다 — 완전히 막히는 것보다는 "일부 보호 약화"가
+안전하다.
 """
 
 from __future__ import annotations
 
 import contextlib
+import getpass
 import hashlib
 import hmac
 import json
@@ -37,7 +50,78 @@ import time
 
 from emailtomcp.core.errors import SecurityError
 
-SINGLE_INSTANCE_KEY = "EmailToMCP-single-instance"
+_BASE_SINGLE_INSTANCE_KEY = "EmailToMCP-single-instance"
+
+
+def _win32_username_via_api() -> str | None:
+    """`GetUserNameW` Win32 API로 사용자명을 얻는다(환경변수 미사용, M-2).
+
+    `ctypes.WinDLL("advapi32")`로 직접 호출한다 — `pywin32` 같은 외부 의존성을 추가하지
+    않는다. 실패(DLL 로드 실패 등)하면 `None`.
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+    advapi32.GetUserNameW.argtypes = [wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)]
+    advapi32.GetUserNameW.restype = wintypes.BOOL
+
+    size = wintypes.DWORD(0)
+    # 첫 호출은 버퍼가 없어 항상 실패(0)로 끝나지만, size에 필요한 길이(널 종료 포함)를 채운다.
+    advapi32.GetUserNameW(None, ctypes.byref(size))
+    if size.value == 0:
+        return None
+    buf = ctypes.create_unicode_buffer(size.value)
+    if not advapi32.GetUserNameW(buf, ctypes.byref(size)):
+        return None
+    return buf.value or None
+
+
+def _current_user_identity() -> str | None:
+    """OS API로 현재 사용자 식별값을 얻는다(환경변수 미사용 우선, M-2). 실패하면 `None`."""
+    if sys.platform == "win32":
+        try:
+            identity = _win32_username_via_api()
+        except Exception:  # noqa: BLE001 — DLL 로드 실패 등 드문 경우
+            identity = None
+        if identity:
+            return identity
+        # Win32 API 호출 자체가 실패한 극단적인 경우에만 os.getlogin()으로 내려간다.
+        try:
+            return os.getlogin()
+        except Exception:  # noqa: BLE001
+            return None
+    # 비Windows: os.getlogin()을 먼저 시도하고(일부 환경에서 제어 터미널이 없어 실패할 수
+    # 있다), 안 되면 getpass.getuser()로 내려간다 — 이쪽은 환경변수 문제가 덜하다.
+    try:
+        return os.getlogin()
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        return getpass.getuser()
+    except Exception:  # noqa: BLE001 — 플랫폼별 다양한 실패 모드(홈 디렉터리 없음 등)
+        return None
+
+
+def _current_user_token() -> str | None:
+    """파이프/소켓 이름에 섞을 사용자 식별 조각. 실패하면 `None`(호출자가 공용 이름으로 내려감).
+
+    OS API로 얻은 식별값을 `sha256(...).hexdigest()[:16]`으로 해시한다 — 한글 계정명도
+    영문 계정명과 동등하게 구분되고(M-1), 원본 계정명이 로그·파이프 이름에 노출되지 않는다.
+    """
+    identity = _current_user_identity()
+    if not identity:
+        return None
+    digest = hashlib.sha256(identity.encode("utf-8", errors="surrogatepass")).hexdigest()
+    return digest[:16]
+
+
+def _single_instance_key() -> str:
+    token = _current_user_token()
+    return f"{_BASE_SINGLE_INSTANCE_KEY}-{token}" if token else _BASE_SINGLE_INSTANCE_KEY
+
+
+SINGLE_INSTANCE_KEY = _single_instance_key()
 
 CMD_ACTIVATE = "activate"
 CMD_HANDSHAKE = "mcp_handshake"

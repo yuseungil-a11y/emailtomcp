@@ -46,6 +46,7 @@ from typing import Literal
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
+from emailtomcp.core.error_codes import ErrorCode
 from emailtomcp.core.errors import PermanentError, SecurityError
 
 KeyRole = Literal["active", "standby"]
@@ -199,11 +200,16 @@ def verify_minisign(
     try:
         key.public_key.verify(sig.signature, signed_payload)
     except InvalidSignature as exc:
-        raise SecurityError("매니페스트 서명 검증에 실패했습니다") from exc
+        raise SecurityError(
+            "매니페스트 서명 검증에 실패했습니다", error_code=ErrorCode.UPDATE_SIGNATURE_INVALID
+        ) from exc
     try:
         key.public_key.verify(
             sig.global_signature, sig.signature + sig.trusted_comment.encode("utf-8")
         )
     except InvalidSignature as exc:
-        raise SecurityError("trusted comment 서명(global signature) 검증에 실패했습니다") from exc
+        raise SecurityError(
+            "trusted comment 서명(global signature) 검증에 실패했습니다",
+            error_code=ErrorCode.UPDATE_SIGNATURE_INVALID,
+        ) from exc
     return sig, key

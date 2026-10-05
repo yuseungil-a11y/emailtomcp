@@ -15,6 +15,7 @@ import logging
 import poplib
 import ssl
 
+from emailtomcp.core.error_codes import ErrorCode
 from emailtomcp.core.errors import AuthError, PermanentError, TransientError
 from emailtomcp.mail.incoming.base import FetchedMessage, RemoteFolder, RemoteMessageSummary
 
@@ -79,9 +80,13 @@ class Pop3IncomingProvider:
             self._conn.user(self._username)
             self._conn.pass_(self._password)
         except poplib.error_proto as exc:
-            raise AuthError(f"POP3 인증 실패: {exc}") from exc
+            raise AuthError(
+                f"POP3 인증 실패: {exc}", error_code=ErrorCode.POP3_AUTH_FAILED
+            ) from exc
         except (OSError, TimeoutError) as exc:
-            raise TransientError(f"POP3 연결 실패: {exc}") from exc
+            raise TransientError(
+                f"POP3 연결 실패: {exc}", error_code=ErrorCode.POP3_CONNECT_FAILED
+            ) from exc
 
     def _require_conn(self) -> poplib.POP3:
         if self._conn is None:

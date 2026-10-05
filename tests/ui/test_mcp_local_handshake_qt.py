@@ -90,3 +90,49 @@ def test_activate_and_unknown_commands(qtbot, guard) -> None:  # noqa: ANN001
     # 허용 외 명령에는 아무 응답도 하지 않는다(L2).
     assert box2.get("value", b"") == b""
     assert state["activated"] == 1
+
+
+# ---------------------------------------------------------------- M-1/M-2(데카르트 QA #48)
+
+
+def test_korean_usernames_do_not_collide(monkeypatch: pytest.MonkeyPatch) -> None:
+    """한글 계정명 2개는 서로 다른 해시 키를 만들어야 한다(M-1 — 과거엔 둘 다 'kim'으로 충돌)."""
+    monkeypatch.setattr(hs, "_current_user_identity", lambda: "kim철수")
+    token_a = hs._current_user_token()
+    monkeypatch.setattr(hs, "_current_user_identity", lambda: "kim영희")
+    token_b = hs._current_user_token()
+
+    assert token_a is not None
+    assert token_b is not None
+    assert token_a != token_b
+    # 과거처럼 비한글 접두만 남는 식으로 퇴화하지 않았는지 재확인.
+    assert "kim" not in token_a and "kim" not in token_b
+
+
+def test_identity_lookup_failure_falls_back_to_common_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """사용자 식별값을 전혀 얻지 못하면(OS API·폴백 모두 실패) 안전하게 공용 이름으로 내려간다."""
+    monkeypatch.setattr(hs, "_current_user_identity", lambda: None)
+    assert hs._current_user_token() is None
+    assert hs._single_instance_key() == hs._BASE_SINGLE_INSTANCE_KEY
+
+
+def test_different_env_vars_still_yield_same_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """GUI와 stdio 프록시가 서로 다른 환경변수를 가져도 같은 키를 계산해야 한다(M-2 회귀 수정).
+
+    OS API 기반 조회(`_current_user_identity`)는 바꾸지 않고, 환경변수만 양쪽에서 다르게
+    흉내 낸다 — 환경변수가 더 이상 키 계산에 영향을 주면 안 된다.
+    """
+    monkeypatch.setattr(hs, "_current_user_identity", lambda: "현재사용자")
+
+    monkeypatch.delenv("USERNAME", raising=False)
+    monkeypatch.delenv("USER", raising=False)
+    monkeypatch.delenv("LOGNAME", raising=False)
+    key_gui = hs._single_instance_key()
+
+    monkeypatch.setenv("USERNAME", "완전히다른값")
+    monkeypatch.setenv("USER", "completely-different")
+    key_stdio_proxy = hs._single_instance_key()
+
+    assert key_gui == key_stdio_proxy
