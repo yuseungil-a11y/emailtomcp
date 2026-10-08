@@ -1995,6 +1995,17 @@ def run_app(mcp_port: int | None = None) -> int:
     window.show()
 
     # MCP 서버는 창이 이벤트를 받을 준비가 된 뒤 시작한다(McpStatusChanged를 놓치지 않게).
+    #
+    # 이 submit()의 타임아웃(15초)은 McpServiceRunner.start() 내부에서 host.start()에
+    # 걸어 두는 타임아웃(asgi_host.DEFAULT_START_TIMEOUT_SECONDS, 10초)보다 길게 둔다 —
+    # host.start()가 그 안에서 반드시 성공·실패 중 하나로 끝나므로, submit()의 15초는
+    # (executor 경합 등으로 코루틴이 실제로 시작되기까지 걸리는) 추가 여유일 뿐이다.
+    # EMCP-2026-1008: 예전에는 host.start()에 자체 타임아웃이 없어, lifespan 진입
+    # (session_manager.run())이 외부 요인(예: 방화벽 정책 엔진 경합)으로 멈추면 submit()만
+    # 타임아웃 예외를 내고 실제 코루틴은 포트를 쥔 채 백엔드 루프에서 영원히 멈춰 있었다 —
+    # 재시도도 복구도 불가능한 상태로 MCP가 죽는 버그였다. 지금은 host.start() 자신이
+    # 10초 안에 반드시 끝나므로(성공 또는 소켓을 정리한 깨끗한 실패), 이 submit()이 실제로
+    # 타임아웃나는 일은 거의 없어야 하고, 혹시 나더라도 백엔드 쪽은 곧 스스로 정리된다.
     try:
         backend.submit(mcp_runner.start(), timeout=15.0)
     except Exception:  # noqa: BLE001 — MCP 실패가 메일 클라이언트 기동을 막으면 안 된다

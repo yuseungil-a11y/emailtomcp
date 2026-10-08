@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 LOOPBACK_ADDRESS = "127.0.0.1"
 GRACEFUL_SHUTDOWN_SECONDS = 3
+DEFAULT_START_TIMEOUT_SECONDS = 10.0
 
 
 class PortUnavailableError(RuntimeError):
@@ -153,12 +154,28 @@ class AsgiHost:
         except Exception:  # noqa: BLE001 — 종료 콜백 오류가 종료 자체를 막으면 안 된다
             logger.warning("ASGI 호스트 종료 콜백 오류", exc_info=True)
 
-    async def start(self) -> None:
-        """서비스를 시작하고, uvicorn이 리슨을 시작할 때까지 기다린다."""
+    async def start(self, *, timeout: float = DEFAULT_START_TIMEOUT_SECONDS) -> None:
+        """서비스를 시작하고, uvicorn이 리슨을 시작할 때까지 기다린다.
+
+        `timeout`초 안에 `self._started`가 set되지 않으면(예: lifespan 진입이 OS/네트워크
+        스택 쪽 경합 등 바깥 요인으로 멈춤) 태스크를 취소하고 `TimeoutError`를 낸다 —
+        그대로 두면 이미 bind·listen된 소켓을 영원히 쥔 채 아무도 멈추거나 재시도할 수
+        없는 상태로 남는다(실제 장애 사례: EMCP-2026-1008). 취소돼도 `_serve()`의
+        try/finally가 소켓을 닫으므로, 호출자는 실패 후 같은 포트로 다시 시작을 시도할 수
+        있다.
+        """
         self._task = asyncio.get_running_loop().create_task(
             self._serve(), name="emailtomcp-mcp-http"
         )
-        await self._started.wait()
+        try:
+            await asyncio.wait_for(self._started.wait(), timeout=timeout)
+        except TimeoutError:
+            self._task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await self._task
+            raise TimeoutError(
+                f"MCP HTTP 서버가 {timeout:g}초 안에 시작되지 않았습니다"
+            ) from None
         for _ in range(100):
             if self._task.done() or (self._server is not None and self._server.started):
                 break

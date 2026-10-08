@@ -127,6 +127,36 @@ def test_on_exit_runs_before_lifespan_cleanup_and_only_once() -> None:
     assert events == ["enter", "on_exit", "aexit"]
 
 
+def test_start_timeout_cancels_task_and_frees_socket_for_retry() -> None:
+    """EMCP-2026-1008: lifespan 진입이 멈추면(예: 방화벽 정책 엔진 경합 등 바깥 요인)
+    `start()`가 영원히 걸리는 대신 `timeout`초 안에 `TimeoutError`를 내고, 이미
+    bind·listen된 소켓을 정리해 같은 포트로 재시도할 수 있게 한다."""
+
+    class _HangingLifespan:
+        async def __aenter__(self) -> None:
+            await asyncio.Event().wait()  # 아무도 set하지 않는다 — 영원히 멈춘다
+
+        async def __aexit__(self, *exc: object) -> None:
+            return None
+
+    async def _app(scope, receive, send) -> None:  # noqa: ANN001
+        return None
+
+    async def _run() -> tuple[int, bool]:
+        sock = create_loopback_socket(0)
+        port = sock.getsockname()[1]
+        host = AsgiHost(_app, sock, lifespan=_HangingLifespan)
+        with pytest.raises(TimeoutError):
+            await host.start(timeout=0.2)
+        return port, host.running
+
+    port, running = asyncio.run(_run())
+    assert running is False
+    # 소켓이 실제로 닫혔다 — 같은 포트로 바로 다시 바인딩할 수 있어야 한다(재시도 가능).
+    retry = create_loopback_socket(port)
+    retry.close()
+
+
 def test_on_exit_runs_while_listening_socket_is_still_open() -> None:
     """S-1: on_exit 호출 시점에 리슨 소켓이 아직 열려 있다(닫힌 뒤가 아니다).
 
