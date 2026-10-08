@@ -36,6 +36,10 @@ PACK_TITLE = "EmailToMCP"
 PACK_AUTHORS = "UTInfo"
 CHANNEL = "stable"
 MAIN_EXE = "emailtomcp.exe"
+# `--runtime`을 명시하지 않으면 vpk가 architecture를 x86으로 기본설정해 preprocess
+# 스테이징 폴더 복사 단계에서 System.UnauthorizedAccessException이 날 수 있다(로컬 재현,
+# 2026-10-05). 이 프로젝트는 현재 win-x64만 타겟한다(release.yml matrix arch: x64) — 고정값.
+RUNTIME = "win-x64"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ICON = REPO_ROOT / "src" / "emailtomcp" / "ui" / "resources" / "icons" / "app_icon.ico"
 
@@ -60,6 +64,8 @@ def build_vpk_command(
         str(pack_dir),
         "--mainExe",
         MAIN_EXE,
+        "--runtime",
+        RUNTIME,
         "--packTitle",
         PACK_TITLE,
         "--packAuthors",

@@ -1277,6 +1277,20 @@ def test_vpk_command_uses_semver2_and_channel(tmp_path: Path) -> None:
         build_velopack.channel_for("1.0.1.dev1")
 
 
+def test_vpk_command_includes_explicit_runtime(tmp_path: Path) -> None:
+    """`--runtime`이 없으면 vpk가 x86으로 기본설정해 UnauthorizedAccessException이 난다(로컬 재현,
+    2026-10-05) — 환경에 의존하지 않도록 항상 win-x64를 명시한다."""
+    cmd = build_velopack.build_vpk_command(
+        "vpk",
+        version="1.0.1",
+        pack_dir=tmp_path / "d",
+        output_dir=tmp_path / "o",
+        icon=None,
+        channel=build_velopack.CHANNEL,
+    )
+    assert cmd[cmd.index("--runtime") + 1] == "win-x64"
+
+
 def test_build_velopack_dry_run(capsys) -> None:
     assert build_velopack.main(["--version", "1.0.1", "--dry-run", "--no-icon"]) == 0
     out = capsys.readouterr().out

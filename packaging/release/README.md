@@ -274,9 +274,15 @@ Velopack도 rc는 `rc` 채널로 패키징해 stable 피드와 섞이지 않게 
   작성 PC의 `gh`가 로그인돼 있지 않아 `gh api`로 ruleset을 만들지 못했다 — 0단계 "저장소 설정"대로 관리자가 직접 적용해야 한다.
   특히 `v*` 태그 ruleset은 rc 시험 태그를 push하기 **전에** 적용한다(보안검토 44 조건부 Go 조건).
 
-- **실제 빌드로 검증하지 않았다.** 작성 환경에 `vpk`와 `minisign`이 없어 `vpk pack`·minisign 서명·워크플로를
-  실제로 돌려 보지 못했다. 첫 릴리스(또는 `v1.0.0rc1` 같은 시험 태그) 때 각 단계 출력 파일명을 확인하고 이 문서를 보정한다.
-  특히 Velopack 출력 파일명(`EmailToMCP-stable-Setup.exe`, `EmailToMCP-<semver>-stable-full.nupkg` 등)은
+- **`vpk pack`(Velopack) 로컬 빌드 검증 완료(2026-10-05).** 로컬 PC에 `vpk`를 설치해 `build_velopack.py`로
+  실제 `Setup.exe`를 생성하고, 설치·기동·제거까지 확인했다(약 31초 소요). 이 과정에서 버그를 발견해 수정했다 —
+  `vpk pack`에 `--runtime`을 명시하지 않으면 vpk가 architecture를 x86으로 기본설정해 preprocess 스테이징 폴더
+  복사 단계에서 `System.UnauthorizedAccessException`이 발생했다(로컬 5회 연속 재현). GitHub Actions의
+  `release.yml`은 rc1 테스트에서 이미 성공했으나(클라우드 환경 차이로 우연히 문제가 드러나지 않은 것으로 보임)
+  환경에 의존하지 않도록 `build_vpk_command()`가 항상 `--runtime win-x64`를 고정으로 넘기게 고쳤다(이 프로젝트는
+  현재 win-x64만 타겟, `release.yml` matrix `arch: x64`). minisign 서명·전체 release.yml 워크플로는 아직
+  실제로 돌려 보지 못했다 — 첫 릴리스(또는 `v1.0.0rc1` 같은 시험 태그) 때 각 단계 출력 파일명을 확인하고 이 문서를
+  보정한다. 특히 Velopack 출력 파일명(`EmailToMCP-stable-Setup.exe`, `EmailToMCP-<semver>-stable-full.nupkg` 등)은
   `release_common.classify_file`의 접미사 규칙(`-Setup.exe`, `-full.nupkg`, `-delta.nupkg`, `releases.<채널>.json`)으로만 판단한다.
 - 델타 패키지는 아직 만들지 않는다(이전 릴리스 full nupkg를 `vpk download`로 받아 둬야 생성됨). 스키마·스크립트는 `velopack_delta`를 지원한다.
 - Windows 창 모드(`console=False`) exe는 `--version` 출력이 비어 있을 수 있어, 워크플로 스모크는 이 경우 종료 코드만 확인하고 경고를 남긴다.
